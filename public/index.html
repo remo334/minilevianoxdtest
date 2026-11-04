@@ -1,0 +1,422 @@
+<!-- Leviano Xd-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#050506">
+<link rel="icon" href="https://levianoxd.orionbey76.workers.dev/f/Img-1793369696735.jpg">
+<meta name="description" content="LEVIANO XD is a multi-device WhatsApp bot. Generate an 8-character pairing code and link your number in seconds. No QR scan needed.">
+<title>LEVIANO XD – Multi-Device WhatsApp Bot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#050506; --surface:#0b0b0e; --raised:#121217; --line:#1e1e26;
+  --text:#eceef3; --muted:#8a8e9b; --accent:#5b8def; --accent-2:#3a6fdc; --ok:#3ecf8e; --danger:#ff7a8a;
+  color-scheme:dark;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;scroll-padding-top:84px}
+body{font-family:'Sora',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:var(--ink);color:var(--text);
+  line-height:1.6;overflow-x:hidden;
+  background-image:radial-gradient(900px 480px at 50% -10%,rgba(91,141,239,.09),transparent 65%)}
+#bg{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+a{color:inherit;text-decoration:none}
+button{font:inherit;cursor:pointer;border:0}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}
+.wrap{position:relative;z-index:1;max-width:1040px;margin:0 auto;padding:0 22px}
+
+nav{position:sticky;top:0;z-index:5;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  background:rgba(7,6,10,.7);border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top)}
+nav .wrap{display:flex;align-items:center;justify-content:space-between;height:64px}
+.brand{display:flex;align-items:center;gap:11px;font-weight:700;font-size:16px}
+.logo{position:relative;overflow:hidden;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font-weight:800;color:#fff;
+  background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:0 6px 20px rgba(91,141,239,.3)}
+.links{display:flex;gap:6px}
+.links a{padding:8px 14px;border-radius:9px;font-size:14px;color:var(--muted);font-weight:500;transition:color .2s,background .2s}
+.links a:hover{color:var(--text);background:var(--raised)}
+
+.hero{display:grid;grid-template-columns:1.15fr .85fr;gap:48px;align-items:center;padding:84px 0 70px}
+.pill{display:inline-flex;align-items:center;gap:9px;font-size:13px;font-weight:500;color:var(--muted);
+  border:1px solid var(--line);background:rgba(16,13,21,.7);border-radius:99px;padding:7px 14px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 rgba(79,214,180,.6);animation:pulse 2s infinite}
+@keyframes pulse{70%{box-shadow:0 0 0 8px rgba(79,214,180,0)}100%{box-shadow:0 0 0 0 rgba(79,214,180,0)}}
+h1{font-size:clamp(36px,6vw,58px);line-height:1.08;font-weight:800;letter-spacing:-1.5px;margin:22px 0 18px}
+h1 em{font-style:normal;color:var(--accent)}
+.sub{color:var(--muted);font-size:16.5px;max-width:30em}
+.sub b{color:var(--text);font-weight:600}
+.cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:30px}
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:14px 24px;border-radius:12px;font-weight:700;font-size:15px;transition:transform .15s,box-shadow .2s,border-color .2s}
+.btn.main{color:#fff;background:linear-gradient(180deg,#6b9aff,var(--accent-2));box-shadow:0 10px 26px -12px rgba(91,141,239,.7)}
+.btn.main:hover{transform:translateY(-2px)}
+.btn.ghost{color:var(--text);background:var(--surface);border:1px solid var(--line)}
+.btn.ghost:hover{border-color:var(--accent)}
+.profile{background:rgba(16,13,21,.8);border:1px solid var(--line);border-radius:16px;padding:34px 26px;text-align:center;
+  box-shadow:0 30px 70px -30px #000,inset 0 1px 0 rgba(255,255,255,.04)}
+.avatar{width:104px;height:104px;border-radius:50%;margin:0 auto 18px;display:grid;place-items:center;font-size:44px;font-weight:800;
+  background:linear-gradient(135deg,var(--accent),var(--accent-2));padding:3px;position:relative}
+.avatar span{position:relative;overflow:hidden;display:grid;place-items:center;width:100%;height:100%;border-radius:50%;background:var(--surface)}
+.logo img,.avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
+.profile h3{font-size:22px;font-weight:700}
+.profile p{color:var(--muted);font-size:14px;margin-top:3px}
+.tags{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:18px}
+.tags span{font-size:12px;font-weight:600;color:var(--accent);background:rgba(91,141,239,.1);border:1px solid rgba(91,141,239,.25);border-radius:99px;padding:5px 12px}
+
+section{padding:56px 0}
+.head{text-align:center;margin-bottom:34px}
+h2{font-size:clamp(26px,4vw,34px);font-weight:800;letter-spacing:-.8px}
+.head p{color:var(--muted);margin-top:8px;font-size:15px}
+.card{max-width:520px;margin:0 auto;background:rgba(16,13,21,.82);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  border:1px solid var(--line);border-radius:16px;padding:32px 28px;box-shadow:0 30px 70px -30px #000,inset 0 1px 0 rgba(255,255,255,.04)}
+label{display:block;font-size:13px;font-weight:600;margin-bottom:8px}
+.field{display:flex;align-items:center;background:var(--ink);border:1px solid var(--line);border-radius:12px;transition:border-color .2s,box-shadow .2s}
+.field:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px rgba(91,141,239,.18)}
+.field span{padding-left:16px;color:var(--muted);font-weight:600}
+input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--text);font:inherit;font-size:16px;padding:15px 16px 15px 8px}
+input::placeholder{color:#51485f}
+.hint{font-size:12.5px;color:var(--muted);margin-top:8px}
+.srv{margin-bottom:18px}
+.selwrap{position:relative}
+.selwrap select{width:100%;appearance:none;-webkit-appearance:none;font:inherit;font-size:15px;color:var(--text);background:var(--ink);border:1px solid var(--line);border-radius:12px;padding:14px 44px 14px 16px;cursor:pointer;transition:border-color .2s,box-shadow .2s}
+.selwrap select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(91,141,239,.18)}
+.selwrap::after{content:"";position:absolute;right:18px;top:50%;width:8px;height:8px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:translateY(-70%) rotate(45deg);pointer-events:none}
+.slots{height:6px;border-radius:99px;background:var(--line);margin-top:10px;overflow:hidden}
+.slots i{display:block;height:100%;width:0;border-radius:99px;background:var(--ok);transition:width .4s,background .3s}
+.slots i.warn{background:#f0b24a}.slots i.full{background:var(--danger)}
+#go{width:100%;margin-top:20px}
+#go:disabled{opacity:.65;cursor:wait;transform:none}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;margin-right:9px;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.result{margin-top:22px;padding:22px;border:1px dashed var(--line);border-radius:14px;text-align:center;color:var(--muted);font-size:14px}
+.result.ok{border-style:solid;border-color:rgba(79,214,180,.35);background:rgba(79,214,180,.05);animation:rise .35s ease}
+.result.bad{border-style:solid;border-color:rgba(255,122,138,.35);background:rgba(255,122,138,.06);color:var(--danger)}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.codebox{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:32px;font-weight:700;letter-spacing:5px;color:var(--ok);
+  background:transparent;border:0;cursor:pointer;display:block;width:100%;padding:4px 0}
+.copy{margin-top:12px;background:var(--raised);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:9px 18px;font-size:13px;font-weight:600;transition:border-color .2s}
+.copy:hover{border-color:var(--accent)}
+.small{font-size:12.5px;margin-top:10px}
+
+.guide{max-width:760px;margin:0 auto;display:grid;grid-template-columns:repeat(2,1fr);gap:14px;list-style:none;counter-reset:s}
+.guide li{counter-increment:s;display:flex;gap:14px;background:rgba(16,13,21,.75);border:1px solid var(--line);border-radius:16px;padding:18px;font-size:14px;color:var(--muted)}
+.guide li::before{content:counter(s);flex:none;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;font-weight:700;font-size:13px;color:var(--accent);background:rgba(91,141,239,.12)}
+.guide b{color:var(--text);font-weight:600}
+footer{position:relative;z-index:1;border-top:1px solid var(--line);padding:28px 22px calc(28px + env(safe-area-inset-bottom));text-align:center;color:#6a627a;font-size:13px}
+
+@property --a{syntax:"<angle>";initial-value:0deg;inherits:false}
+.rv{opacity:0;transform:translateY(26px);transition:opacity .8s cubic-bezier(.2,.7,.2,1),transform .8s cubic-bezier(.2,.7,.2,1);transition-delay:var(--d,0ms)}
+.rv.in{opacity:1;transform:none}
+.card,.profile{position:relative}
+.card::before{content:"";position:absolute;inset:-1px;border-radius:inherit;padding:1px;pointer-events:none;
+  background:conic-gradient(from var(--a),transparent 0 72%,var(--accent) 88%,transparent 100%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0);
+  animation:rot 7s linear infinite}
+@keyframes rot{to{--a:360deg}}
+.avatar{animation:float 5s ease-in-out infinite}
+@keyframes float{50%{transform:translateY(-8px)}}
+.btn.main{position:relative;overflow:hidden}
+.btn.main::after{content:"";position:absolute;inset:0;background:linear-gradient(105deg,transparent 35%,rgba(255,255,255,.28) 50%,transparent 65%);transform:translateX(-120%);transition:transform .7s}
+.btn.main:hover::after{transform:translateX(120%)}
+.gal{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;max-width:900px;margin:0 auto}
+.gal figure{position:relative;overflow:hidden;border-radius:16px;border:1px solid var(--line);background:var(--surface);aspect-ratio:3/4;
+  box-shadow:0 24px 60px -30px #000;transition:border-color .3s,box-shadow .3s}
+.gal figure:nth-child(2){margin-top:28px}
+.gal img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .8s cubic-bezier(.2,.7,.2,1)}
+.gal figure::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 55%,rgba(5,5,6,.65));pointer-events:none}
+.gal figure:hover{border-color:rgba(91,141,239,.55);box-shadow:0 24px 60px -24px rgba(91,141,239,.35)}
+.gal figure:hover img{transform:scale(1.06)}
+@media(max-width:620px){.gal{grid-template-columns:1fr 1fr}.gal figure:nth-child(2){margin-top:0}.gal figure:last-child{grid-column:1/-1;aspect-ratio:16/9}}
+@media(prefers-reduced-motion:reduce){.rv{opacity:1;transform:none;transition:none}.card::before,.avatar{animation:none}.btn.main::after{display:none}}
+.gifbg{position:fixed;inset:0;z-index:0;pointer-events:none;background:var(--ink);overflow:hidden}
+.gifbg i{position:absolute;inset:0;background-size:cover;background-position:center;opacity:0;transform:scale(1.04);filter:brightness(.6) saturate(.9);transition:opacity 1.8s ease}
+.gifbg i.on{opacity:1}
+.gifbg::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(5,5,6,.55),rgba(5,5,6,.78) 60%,rgba(5,5,6,.9))}
+@media(prefers-reduced-motion:reduce){.gifbg{display:none}}
+.mbtn{position:fixed;right:max(18px,env(safe-area-inset-right));bottom:max(18px,env(safe-area-inset-bottom));z-index:6;width:48px;height:48px;border-radius:50%;
+  background:rgba(12,12,16,.85);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--line);color:var(--muted);
+  display:grid;place-items:center;transition:border-color .2s,color .2s}
+.mbtn:hover{border-color:var(--accent);color:var(--text)}
+.mbtn.on{color:var(--accent);border-color:rgba(91,141,239,.5)}
+.eq{display:flex;align-items:flex-end;gap:3px;height:16px}
+.eq i{width:3px;height:30%;background:currentColor;border-radius:2px}
+.mbtn.on .eq i{animation:eq .9s ease-in-out infinite}
+.mbtn.on .eq i:nth-child(2){animation-delay:-.3s}.mbtn.on .eq i:nth-child(3){animation-delay:-.6s}.mbtn.on .eq i:nth-child(4){animation-delay:-.15s}
+@keyframes eq{0%,100%{height:25%}50%{height:100%}}
+.mhint{position:fixed;left:50%;bottom:max(24px,env(safe-area-inset-bottom));transform:translateX(-50%);z-index:6;font-size:13px;font-weight:500;color:var(--muted);
+  background:rgba(12,12,16,.9);border:1px solid var(--line);border-radius:99px;padding:9px 16px;pointer-events:none;transition:opacity .4s;white-space:nowrap}
+.mhint.gone{opacity:0}
+@media(prefers-reduced-motion:reduce){.mbtn.on .eq i{animation:none;height:70%}}
+@media(max-width:820px){.hero{grid-template-columns:1fr;padding:52px 0 40px;gap:34px}.profile{order:-1;max-width:380px;width:100%;margin:0 auto}.guide{grid-template-columns:1fr}}
+@media(max-width:380px){.card{padding:26px 20px}.codebox{font-size:25px;letter-spacing:3px}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.dot,.spin,.result.ok{animation:none}.btn{transition:none}}
+</style>
+</head>
+<body>
+<div class="gifbg" id="gifbg" aria-hidden="true"><i></i><i></i><i></i></div>
+<canvas id="bg" aria-hidden="true"></canvas>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="#top"><span class="logo" aria-hidden="true">X<img src="https://files.catbox.moe/hc0ovk.png" alt="" onerror="this.remove()"></span>LEVIANO XD</a>
+    <div class="links"><a href="#gallery">Gallery</a><a href="#pair">Pair</a><a href="#guide">Guide</a></div>
+  </div>
+</nav>
+
+<main id="top" class="wrap">
+  <div class="hero">
+    <div>
+      <span class="pill"><i class="dot"></i>Web online · Multi-device ready</span>
+      <h1>LEVIANO XD <em>WhatsApp Bot</em></h1>
+      <p class="sub">Link your number in seconds. Generate an 8-character code and connect your bot. <b>No QR scan needed.</b></p>
+      <div class="cta">
+        <a class="btn main" href="#pair">Get pairing code</a>
+        <a class="btn ghost" href="#guide">How it works</a>
+      </div>
+    </div>
+    <aside class="profile">
+      <div class="avatar"><span>X<img src="https://files.catbox.moe/hc0ovk.png" alt="LEVIANO XD logo" onerror="this.remove()"></span></div>
+      <h3>LEVIANO XD</h3>
+      <p>Multi-session WhatsApp bot</p>
+      <div class="tags"><span>Multi-device</span><span>Pairing code</span><span>Plugins</span></div>
+    </aside>
+  </div>
+
+  <section id="gallery">
+    <div class="head">
+      <h2>Gallery</h2>
+      <p>A look at the LEVIANO XD style.</p>
+    </div>
+    <div class="gal">
+    <figure><img src="https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3aHhnMnE1djIyMmV4YzhhczI0OTNxM3dpdml6eTNhNnR4NnVmOG41NyZlcD12MV9naWZzX3JlbGF0ZWQmY3Q9Zw/utx4rJxu0MiGc/giphy.gif" alt="Animated artwork 1" loading="lazy" decoding="async" onerror="this.closest('figure').hidden=true"></figure>
+    <figure><img src="https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3aHhnMnE1djIyMmV4YzhhczI0OTNxM3dpdml6eTNhNnR4NnVmOG41NyZlcD12MV9naWZzX3JlbGF0ZWQmY3Q9Zw/enrJj5p6lJD9WoFegD/giphy.gif" alt="Animated artwork 2" loading="lazy" decoding="async" onerror="this.closest('figure').hidden=true"></figure>
+    <figure><img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExY3h3b3JzZ3N4cmtncnNmdXR2cTVsem1lOHZjbWR3ZTdyMDJkNWx3NyZlcD12MV9naWZzX3JlbGF0ZWQmY3Q9Zw/10ToEKrp3s99Fm/giphy.gif" alt="Animated artwork 3" loading="lazy" decoding="async" onerror="this.closest('figure').hidden=true"></figure>
+    </div>
+  </section>
+
+  <section id="pair">
+    <div class="head">
+      <h2>Generate pairing code</h2>
+      <p>Enter your number, get a code, link instantly.</p>
+    </div>
+    <div class="card">
+      <div class="srv">
+        <label for="server">Select server</label>
+        <div class="selwrap"><select id="server"><option value="">Loading servers…</option></select></div>
+        <div class="slots" aria-hidden="true"><i id="slotbar"></i></div>
+        <p class="hint" id="slotinfo">Choose where your bot will run.</p>
+      </div>
+      <label for="phone">Phone number (with country code)</label>
+      <div class="field">
+        <span>+</span>
+        <input id="phone" type="tel" inputmode="numeric" autocomplete="tel" maxlength="16" placeholder="917907997537">
+      </div>
+      <p class="hint">No spaces, dashes or plus sign needed.</p>
+      <p class="hint">By linking, your number will also follow our WhatsApp channel.</p>
+      <button class="btn main" id="go" type="button">Generate pairing code</button>
+      <div class="result" id="result" aria-live="polite">Your pairing code will appear here.</div>
+    </div>
+  </section>
+
+  <section id="guide">
+    <div class="head">
+      <h2>How to connect the code</h2>
+      <p>Six quick steps from number to linked bot.</p>
+    </div>
+    <ol class="guide">
+      <li><span>Enter your full WhatsApp number with the country code, for example <b>917907997537</b>.</span></li>
+      <li><span>Tap <b>Generate pairing code</b> and wait for the 8-character code.</span></li>
+      <li><span>Tap the code or press <b>Copy</b> to copy it.</span></li>
+      <li><span>Open WhatsApp, then <b>Settings → Linked devices</b>.</span></li>
+      <li><span>Choose <b>Link with phone number instead</b>.</span></li>
+      <li><span>Paste the code. Your bot connects and sends you a confirmation message.</span></li>
+    </ol>
+  </section>
+</main>
+
+<button class="mbtn" id="mbtn" type="button" aria-label="Play music" aria-pressed="false"><span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span></button>
+<div class="mhint" id="mhint">Tap anywhere to play music</div>
+
+<footer><a href="https://whatsapp.com/channel/0029Vb6xBiYEquiPz7vwc10p" target="_blank" rel="noopener" style="color:var(--accent)">Follow our WhatsApp channel</a><br>© 2026 LEVIANO XD. All rights reserved.</footer>
+
+<script>
+(function () {
+  const c = document.getElementById('bg'), ctx = c.getContext('2d');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let w, h, dpr, pts = [], mouse = { x: -9999, y: -9999 }, raf;
+  const LINK = 130;
+  function size() {
+    dpr = Math.min(devicePixelRatio || 1, 2);
+    w = innerWidth; h = innerHeight;
+    c.width = w * dpr; c.height = h * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const n = Math.min(110, Math.floor(w * h / 15000));
+    pts = Array.from({ length: n }, () => ({
+      x: Math.random() * w, y: Math.random() * h,
+      vx: (Math.random() - .5) * .35, vy: (Math.random() - .5) * .35,
+      r: Math.random() * 1.4 + .6
+    }));
+  }
+  function frame() {
+    ctx.clearRect(0, 0, w, h);
+    for (const p of pts) {
+      if (!reduce) {
+        p.x += p.vx; p.y += p.vy;
+        if (p.x < 0 || p.x > w) p.vx *= -1;
+        if (p.y < 0 || p.y > h) p.vy *= -1;
+        const dx = p.x - mouse.x, dy = p.y - mouse.y, d = Math.hypot(dx, dy);
+        if (d < 110 && d > 0) { p.x += dx / d * 1.2; p.y += dy / d * 1.2; }
+      }
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 6.283);
+      ctx.fillStyle = 'rgba(150,175,235,.55)'; ctx.fill();
+    }
+    for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) {
+      const a = pts[i], b = pts[j], d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (d < LINK) {
+        ctx.strokeStyle = 'rgba(91,141,239,' + (0.14 * (1 - d / LINK)).toFixed(3) + ')';
+        ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      }
+    }
+    if (!reduce) raf = requestAnimationFrame(frame);
+  }
+  addEventListener('resize', () => { cancelAnimationFrame(raf); size(); frame(); });
+  addEventListener('pointermove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+  addEventListener('pointerleave', () => { mouse.x = mouse.y = -9999; });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) cancelAnimationFrame(raf); else if (!reduce) frame(); });
+  size(); frame();
+})();
+
+const phone = document.getElementById('phone'), go = document.getElementById('go'), result = document.getElementById('result');
+const serverSel = document.getElementById('server'), slotbar = document.getElementById('slotbar'), slotinfo = document.getElementById('slotinfo');
+let serverList = [];
+
+function showSlots() {
+  const s = serverList.find(x => String(x.id) === serverSel.value);
+  if (!s) { slotbar.style.width = '0'; slotinfo.textContent = 'Choose where your bot will run.'; return; }
+  const pct = s.limit ? Math.min(100, Math.round(s.count / s.limit * 100)) : 0;
+  slotbar.style.width = pct + '%';
+  slotbar.className = s.full || !s.available ? 'full' : (pct >= 80 ? 'warn' : '');
+  slotinfo.textContent = !s.available ? s.name + ' is offline right now. Pick another server.'
+    : s.full ? s.name + ' is full (' + s.count + '/' + s.limit + ' bots). Pick another server.'
+    : s.name + ': ' + s.count + ' of ' + s.limit + ' bots used, ' + (s.limit - s.count) + ' slot' + (s.limit - s.count === 1 ? '' : 's') + ' left.';
+}
+async function loadServers() {
+  try {
+    const data = await (await fetch('/servers', { cache: 'no-store' })).json();
+    serverList = data.servers || [];
+    const keep = serverSel.value;
+    serverSel.replaceChildren();
+    serverList.forEach(s => {
+      const o = document.createElement('option');
+      o.value = s.id;
+      o.textContent = s.name + (!s.available ? ' (offline)' : s.full ? ' (full)' : ' (' + s.count + '/' + s.limit + ')');
+      o.disabled = s.full || !s.available;
+      serverSel.append(o);
+    });
+    const firstFree = serverList.find(s => !s.full && s.available);
+    const prev = serverList.find(s => String(s.id) === keep && !s.full && s.available);
+    serverSel.value = prev ? keep : (firstFree ? firstFree.id : (serverList[0] ? serverList[0].id : ''));
+    showSlots();
+  } catch { serverSel.replaceChildren(new Option('Could not load servers', '')); slotinfo.textContent = 'Could not load the server list. Refresh the page.'; }
+}
+serverSel.addEventListener('change', showSlots);
+loadServers();
+setInterval(loadServers, 30000);
+
+function copyText(text, btn) {
+  const done = ok => { const o = btn.dataset.l || btn.textContent; btn.dataset.l = o; btn.textContent = ok ? 'Copied' : 'Press Ctrl+C'; setTimeout(() => btn.textContent = o, 1800); };
+  navigator.clipboard.writeText(text).then(() => done(true), () => done(false));
+}
+function bad(text) { result.className = 'result bad'; result.setAttribute('role', 'alert'); result.textContent = text; }
+function ok(code) {
+  result.className = 'result ok'; result.removeAttribute('role'); result.replaceChildren();
+  const box = document.createElement('button'); box.type = 'button'; box.className = 'codebox'; box.textContent = code; box.title = 'Tap to copy';
+  const cp = document.createElement('button'); cp.type = 'button'; cp.className = 'copy'; cp.textContent = 'Copy code';
+  box.onclick = () => copyText(code, cp); cp.onclick = () => copyText(code, cp);
+  const note = document.createElement('p'); note.className = 'small'; note.textContent = 'Enter this in WhatsApp within a minute or two. If it expires, generate a new one.';
+  result.append(box, cp, note);
+}
+async function pair() {
+  const num = phone.value.replace(/\D/g, '');
+  if (num.length < 7) return bad('Enter your full number with the country code, for example 919876543210.');
+  if (!serverSel.value) return bad('Please select a server first.');
+  go.disabled = true; go.innerHTML = '<span class="spin"></span>Requesting code';
+  try {
+    const data = await (await fetch('/pair?number=' + encodeURIComponent(num) + '&server=' + encodeURIComponent(serverSel.value))).json();
+    data.code ? ok(data.code) : bad(data.error || 'Could not get a code. Check the number and try again.');
+  } catch { bad('Could not reach the server. Check your connection and try again.'); }
+  finally { go.disabled = false; go.textContent = 'Generate pairing code'; loadServers(); }
+}
+go.addEventListener('click', pair);
+phone.addEventListener('keydown', e => { if (e.key === 'Enter') pair(); });
+
+(function () {
+  const GIFS = [
+    "https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3aHhnMnE1djIyMmV4YzhhczI0OTNxM3dpdml6eTNhNnR4NnVmOG41NyZlcD12MV9naWZzX3JlbGF0ZWQmY3Q9Zw/utx4rJxu0MiGc/giphy.gif",
+    "https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3aHhnMnE1djIyMmV4YzhhczI0OTNxM3dpdml6eTNhNnR4NnVmOG41NyZlcD12MV9naWZzX3JlbGF0ZWQmY3Q9Zw/enrJj5p6lJD9WoFegD/giphy.gif",
+    "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExY3h3b3JzZ3N4cmtncnNmdXR2cTVsem1lOHZjbWR3ZTdyMDJkNWx3NyZlcD12MV9naWZzX3JlbGF0ZWQmY3Q9Zw/10ToEKrp3s99Fm/giphy.gif"
+  ];
+  const layers = document.querySelectorAll('#gifbg i');
+  let cur = 0;
+  GIFS.forEach((url, k) => {
+    const img = new Image();
+    img.onload = () => { layers[k].style.backgroundImage = 'url("' + url + '")'; layers[k].dataset.ready = '1'; if (k === 0) layers[0].classList.add('on'); };
+    img.src = url;
+  });
+  setInterval(() => {
+    const ready = [...layers].filter(l => l.dataset.ready);
+    if (ready.length < 2) return;
+    layers[cur].classList.remove('on');
+    do { cur = (cur + 1) % layers.length; } while (!layers[cur].dataset.ready);
+    layers[cur].classList.add('on');
+  }, 7000);
+})();
+
+(function () {
+  const els = document.querySelectorAll('.pill,h1,.sub,.cta,.profile,.head,.card,.gal figure,.guide li');
+  els.forEach((el, k) => { el.classList.add('rv'); el.style.setProperty('--d', (k % 4) * 90 + 'ms'); });
+  if (!('IntersectionObserver' in window)) return els.forEach(el => el.classList.add('in'));
+  const io = new IntersectionObserver(list => list.forEach(e => {
+    if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+  }), { threshold: .12, rootMargin: '0px 0px -40px 0px' });
+  els.forEach(el => io.observe(el));
+})();
+
+(function () {
+  const MUSIC_URL = 'https://xenocdn.xenocdn.workers.dev/456e7f86.mp4';
+  const audio = new Audio(MUSIC_URL);
+  audio.loop = true; audio.volume = .5; audio.preload = 'auto';
+
+  const btn = document.getElementById('mbtn'), hint = document.getElementById('mhint');
+  const GESTURES = ['pointerdown', 'keydown', 'touchstart'];
+  let userPaused = false, resumeOnShow = false;
+
+  const paint = () => {
+    const on = !audio.paused;
+    btn.classList.toggle('on', on);
+    btn.setAttribute('aria-pressed', on);
+    btn.setAttribute('aria-label', on ? 'Pause music' : 'Play music');
+  };
+  const play = () => audio.play().then(() => { paint(); hint.classList.add('gone'); unbind(); }, () => false);
+  const onGesture = () => { if (!userPaused) play(); };
+  const unbind = () => GESTURES.forEach(ev => removeEventListener(ev, onGesture));
+
+  GESTURES.forEach(ev => addEventListener(ev, onGesture, { passive: true }));
+  btn.addEventListener('pointerdown', e => e.stopPropagation());
+  btn.addEventListener('click', () => {
+    hint.classList.add('gone');
+    if (audio.paused) { userPaused = false; play(); } else { userPaused = true; audio.pause(); paint(); }
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && !audio.paused) { resumeOnShow = true; audio.pause(); }
+    else if (!document.hidden && resumeOnShow) { resumeOnShow = false; play(); }
+    paint();
+  });
+  audio.addEventListener('error', () => { hint.textContent = 'Music unavailable'; });
+  play();
+})();
+</script>
+</body>
+</html>
