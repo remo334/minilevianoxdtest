@@ -1,0 +1,253 @@
+<!-- Leviano Exe -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#050506">
+<meta name="robots" content="noindex,nofollow">
+<link rel="icon" href="https://files.catbox.moe/hc0ovk.png">
+<title>LEVIANO XD – Admin Panel</title>
+<style>
+:root{
+  --ink:#050506; --surface:#0b0b0e; --raised:#121217; --line:#1e1e26;
+  --text:#eceef3; --muted:#8a8e9b; --accent:#5b8def; --accent-2:#3a6fdc;
+  --ok:#3ecf8e; --warn:#f5b84a; --danger:#ff7a8a;
+  color-scheme:dark;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:var(--ink);color:var(--text);line-height:1.5;min-height:100vh;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  background-image:radial-gradient(900px 480px at 50% -10%,rgba(91,141,239,.09),transparent 65%)}
+button{font:inherit;cursor:pointer;border:0}
+a{color:inherit;text-decoration:none}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}
+.wrap{max-width:1040px;margin:0 auto;padding:0 20px}
+.hidden{display:none!important}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 20px;border-radius:11px;font-weight:700;font-size:14px;transition:border-color .2s,transform .15s}
+.btn.main{color:#fff;background:linear-gradient(180deg,#6b9aff,var(--accent-2))}
+.btn.main:hover{transform:translateY(-1px)}
+.btn.main:disabled{opacity:.6;cursor:wait;transform:none}
+.btn.ghost{color:var(--text);background:var(--surface);border:1px solid var(--line)}
+.btn.ghost:hover{border-color:var(--accent)}
+
+#login{min-height:100vh;display:grid;place-items:center;padding:24px}
+.card{width:100%;max-width:400px;background:rgba(16,13,21,.85);border:1px solid var(--line);border-radius:16px;padding:32px 26px;box-shadow:0 30px 70px -30px #000}
+.card h1{font-size:22px;font-weight:800;letter-spacing:-.4px}
+.card p.sub{color:var(--muted);font-size:14px;margin:6px 0 22px}
+label{display:block;font-size:13px;font-weight:600;margin-bottom:8px}
+.field{display:flex;align-items:center;background:var(--ink);border:1px solid var(--line);border-radius:12px}
+.field:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px rgba(91,141,239,.18)}
+.field input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--text);font:inherit;font-size:16px;padding:14px 14px}
+.field button{background:transparent;color:var(--muted);padding:0 14px;font-size:13px;font-weight:600}
+.err{color:var(--danger);font-size:13px;margin-top:12px;min-height:18px}
+#loginBtn{width:100%;margin-top:18px}
+
+header{border-bottom:1px solid var(--line);background:rgba(7,6,10,.7);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);position:sticky;top:0;z-index:5}
+header .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px;height:62px}
+.brand{font-weight:800;font-size:16px;display:flex;align-items:center;gap:10px}
+.brand small{font-weight:600;color:var(--muted);font-size:12px;border:1px solid var(--line);border-radius:99px;padding:2px 10px}
+.actions{display:flex;gap:8px;align-items:center}
+.live{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:7px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ok);animation:pulse 2s infinite}
+.dot.bad{background:var(--danger);animation:none}
+@keyframes pulse{70%{box-shadow:0 0 0 7px rgba(62,207,142,0)}0%{box-shadow:0 0 0 0 rgba(62,207,142,.6)}}
+main{padding:26px 0 60px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px}
+.stats.s2{grid-template-columns:repeat(4,1fr);margin-bottom:26px}
+.stat{background:rgba(16,13,21,.8);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+.stat span{display:block;font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.6px}
+.stat b{display:block;font-size:26px;font-weight:800;margin-top:4px;letter-spacing:-.5px}
+.stat.s2b b{font-size:18px}
+.stat.ok b{color:var(--ok)} .stat.warn b{color:var(--warn)} .stat.bad b{color:var(--danger)}
+h2{font-size:16px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between}
+h2 em{font-style:normal;color:var(--muted);font-weight:600;font-size:13px}
+.tablebox{background:rgba(16,13,21,.8);border:1px solid var(--line);border-radius:14px;overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:640px}
+th,td{text-align:left;padding:13px 16px;font-size:14px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:700}
+tr:last-child td{border-bottom:0}
+td.num{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-weight:600}
+td.muted{color:var(--muted)}
+.badge{display:inline-flex;align-items:center;gap:7px;padding:4px 11px;border-radius:99px;font-size:12px;font-weight:700;border:1px solid}
+.badge i{width:7px;height:7px;border-radius:50%;background:currentColor}
+.b-online{color:var(--ok);border-color:rgba(62,207,142,.35);background:rgba(62,207,142,.08)}
+.b-wait{color:var(--warn);border-color:rgba(245,184,74,.35);background:rgba(245,184,74,.08)}
+.b-off{color:var(--danger);border-color:rgba(255,122,138,.35);background:rgba(255,122,138,.08)}
+.empty{padding:34px;text-align:center;color:var(--muted);font-size:14px}
+.note{color:var(--muted);font-size:12.5px;margin-top:14px}
+@media(max-width:760px){.stats,.stats.s2{grid-template-columns:repeat(2,1fr)}.live span{display:none}}
+</style>
+</head>
+<body>
+
+<section id="login">
+  <form class="card" id="loginForm" autocomplete="off">
+    <h1>Admin Panel</h1>
+    <p class="sub">LEVIANO XD · enter the admin password to continue.</p>
+    <label for="pw">Password</label>
+    <div class="field">
+      <input id="pw" type="password" placeholder="Password" autocomplete="current-password" required>
+      <button type="button" id="eye" aria-label="Show password">Show</button>
+    </div>
+    <p class="err" id="err" role="alert"></p>
+    <button class="btn main" id="loginBtn" type="submit">Login</button>
+    <p class="note" style="text-align:center"><a href="/" style="color:var(--accent)">← Back to site</a></p>
+  </form>
+</section>
+
+<section id="app" class="hidden">
+  <header>
+    <div class="wrap">
+      <div class="brand">LEVIANO XD <small>ADMIN</small></div>
+      <div class="actions">
+        <span class="live"><i class="dot" id="liveDot"></i><span id="liveTxt">Live</span></span>
+        <button class="btn ghost" id="refresh" type="button">Refresh</button>
+        <button class="btn ghost" id="logout" type="button">Logout</button>
+      </div>
+    </div>
+  </header>
+  <main class="wrap">
+    <div class="stats">
+      <div class="stat"><span>Total numbers</span><b id="sTotal">–</b></div>
+      <div class="stat ok"><span>Online</span><b id="sOnline">–</b></div>
+      <div class="stat warn"><span>Connecting</span><b id="sConn">–</b></div>
+      <div class="stat bad"><span>Offline</span><b id="sOff">–</b></div>
+    </div>
+    <div class="stats s2">
+      <div class="stat s2b"><span>Server uptime</span><b id="sUp">–</b></div>
+      <div class="stat s2b"><span>Memory</span><b id="sMem">–</b></div>
+      <div class="stat s2b"><span>Database</span><b id="sDb">–</b></div>
+      <div class="stat s2b"><span>Node</span><b id="sNode">–</b></div>
+    </div>
+
+    <h2>Servers</h2>
+    <div class="stats s2" id="serverStats"></div>
+
+    <h2>Running bots <em id="updated"></em></h2>
+    <div class="tablebox">
+      <table>
+        <thead><tr><th>#</th><th>Number</th><th>Server</th><th>Status</th><th>Name</th><th>Online for</th><th>Last change</th><th>Saved in DB</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div class="empty hidden" id="empty">No bots found yet.</div>
+    </div>
+    <p class="note">Refreshes every 10 seconds. “Replaced” means the same number connected from another server; “Logged out” means the number removed the linked device.</p>
+  </main>
+</section>
+
+<script>
+const KEY = 'leviano_admin_token';
+const $ = (id) => document.getElementById(id);
+let timer = null;
+
+const token = () => sessionStorage.getItem(KEY);
+function show(loggedIn) {
+  $('login').classList.toggle('hidden', loggedIn);
+  $('app').classList.toggle('hidden', !loggedIn);
+}
+function fmtDur(ms) {
+  if (!ms || ms < 0) return '–';
+  const s = Math.floor(ms / 1000), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  if (d) return d + 'd ' + h + 'h';
+  if (h) return h + 'h ' + m + 'm';
+  if (m) return m + 'm ' + (s % 60) + 's';
+  return s + 's';
+}
+function ago(ts, now) { return ts ? fmtDur(now - ts) + ' ago' : '–'; }
+
+const LABELS = {
+  online: ['Online', 'b-online'], connecting: ['Connecting', 'b-wait'], reconnecting: ['Reconnecting', 'b-wait'],
+  replaced: ['Replaced', 'b-off'], logged_out: ['Logged out', 'b-off'], error: ['Error', 'b-off'], offline: ['Offline', 'b-off']
+};
+
+function cell(text, cls) { const td = document.createElement('td'); td.textContent = text; if (cls) td.className = cls; return td; }
+
+function render(d) {
+  $('sTotal').textContent = d.summary.total;
+  $('sOnline').textContent = d.summary.online;
+  $('sConn').textContent = d.summary.connecting;
+  $('sOff').textContent = d.summary.offline;
+  $('sUp').textContent = fmtDur(d.server.uptimeSec * 1000);
+  $('sMem').textContent = d.server.memoryMb + ' MB';
+  $('sDb').textContent = d.server.database ? 'Connected' : 'Disconnected';
+  $('sNode').textContent = d.server.node;
+  const ss = $('serverStats'); ss.replaceChildren();
+  (d.server.servers || []).forEach(s => {
+    const box = document.createElement('div'); box.className = 'stat s2b ' + (!s.available ? 'bad' : s.full ? 'warn' : 'ok');
+    const l = document.createElement('span'); l.textContent = s.name + (s.available ? '' : ' (offline)');
+    const v = document.createElement('b'); v.textContent = s.count + ' / ' + s.limit + (s.full ? ' FULL' : '');
+    box.append(l, v); ss.append(box);
+  });
+  $('updated').textContent = 'Updated ' + new Date(d.now).toLocaleTimeString();
+
+  const rows = $('rows');
+  rows.replaceChildren();
+  d.bots.forEach((b, i) => {
+    const tr = document.createElement('tr');
+    const [label, cls] = LABELS[b.status] || [b.status, 'b-off'];
+    const st = document.createElement('td');
+    const badge = document.createElement('span');
+    badge.className = 'badge ' + cls;
+    badge.append(document.createElement('i'), document.createTextNode(label + (b.code && b.status !== 'online' ? ' (' + b.code + ')' : '')));
+    st.append(badge);
+    tr.append(
+      cell(i + 1, 'muted'),
+      cell('+' + b.number, 'num'),
+      cell(b.server || '–', 'muted'),
+      st,
+      cell(b.name || '–', b.name ? '' : 'muted'),
+      cell(b.status === 'online' ? fmtDur(d.now - b.connectedAt) : '–', 'muted'),
+      cell(ago(b.since, d.now), 'muted'),
+      cell(b.savedInDb ? 'Yes' : 'No', 'muted')
+    );
+    rows.append(tr);
+  });
+  $('empty').classList.toggle('hidden', d.bots.length > 0);
+  $('liveDot').classList.remove('bad'); $('liveTxt').textContent = 'Live';
+}
+
+async function load() {
+  try {
+    const r = await fetch('/admin/api/status', { headers: { 'x-admin-token': token() || '' } });
+    if (r.status === 401) return logout(false);
+    render(await r.json());
+  } catch (e) {
+    $('liveDot').classList.add('bad'); $('liveTxt').textContent = 'Offline';
+  }
+}
+function start() { show(true); load(); clearInterval(timer); timer = setInterval(load, 10000); }
+async function logout(callServer = true) {
+  clearInterval(timer);
+  if (callServer && token()) fetch('/admin/logout', { method: 'POST', headers: { 'x-admin-token': token() } }).catch(() => {});
+  sessionStorage.removeItem(KEY);
+  $('pw').value = '';
+  show(false);
+}
+
+$('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = $('loginBtn'); $('err').textContent = '';
+  btn.disabled = true; btn.textContent = 'Checking…';
+  try {
+    const r = await fetch('/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: $('pw').value }) });
+    const data = await r.json().catch(() => ({}));
+    if (r.ok && data.token) { sessionStorage.setItem(KEY, data.token); $('pw').value = ''; start(); }
+    else $('err').textContent = data.error || 'Login failed.';
+  } catch { $('err').textContent = 'Could not reach the server.'; }
+  finally { btn.disabled = false; btn.textContent = 'Login'; }
+});
+$('eye').addEventListener('click', () => {
+  const p = $('pw'), hide = p.type === 'text';
+  p.type = hide ? 'password' : 'text'; $('eye').textContent = hide ? 'Show' : 'Hide';
+});
+$('refresh').addEventListener('click', load);
+$('logout').addEventListener('click', () => logout(true));
+document.addEventListener('visibilitychange', () => { if (!document.hidden && token()) load(); });
+
+if (token()) start(); else show(false);
+</script>
+</body>
+</html>
