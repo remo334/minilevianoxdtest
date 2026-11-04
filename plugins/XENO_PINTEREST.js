@@ -2,7 +2,7 @@
 const axios = require('axios')
 const { cmd } = require('../command')
 const { ytdlpDownload } = require('../lib/ytdlp')
-const { fetchSafe, toBuffer, MAX_BYTES } = require('./XENO_DOWNLOAD')
+const { fetchSafe, toBuffer, MAX_BYTES } = require('./leviano_download')
 const IMG_COUNT = 5
 const COOLDOWN_MS = 8000
 const lastUse = new Map()
