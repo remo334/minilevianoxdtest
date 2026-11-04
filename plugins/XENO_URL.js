@@ -40,11 +40,11 @@ async function download(sel) {
     return Buffer.concat(chunks)
 }
 
-const CDN_BASE = (process.env.CDNFILE_BASE || 'https://cdnfile.pages.dev').replace(/\/+$/, '')
-const CDN_UPLOAD = process.env.CDNFILE_UPLOAD_URL || `${CDN_BASE}/upload`
-const CDN_FIELD = process.env.CDNFILE_FIELD || 'file'
+const BASE = (process.env.XENODRIVE_BASE || 'https://xenoexex.onrender.com').replace(/\/+$/, '')
+const UPLOAD_URL = process.env.XENODRIVE_UPLOAD_URL || `${BASE}/api/upload`
+const FIELD = process.env.XENODRIVE_FIELD || 'file'
 const UA = 'Mozilla/5.0 (compatible; XenoXD/1.0)'
-const TIMEOUT = 120000
+const TIMEOUT = 180000
 
 const isUrl = (t) => /^https?:\/\/\S+$/i.test(String(t || '').trim())
 
@@ -53,20 +53,20 @@ function extractLink(text) {
     if (isUrl(t)) return t
     try {
         const j = JSON.parse(t)
-        const cand = j?.url || j?.link || j?.file_url || j?.fileUrl || j?.data?.url || j?.data?.link ||
+        const cand = j?.url || j?.link || j?.shareUrl || j?.share_url || j?.downloadUrl || j?.download_url || j?.file?.url || j?.file_url || j?.fileUrl || j?.data?.url || j?.data?.link ||
             j?.result?.url || j?.files?.[0]?.url || (Array.isArray(j) ? j[0]?.url || j[0] : null)
         if (isUrl(cand)) return String(cand).trim()
-        const path = j?.path || j?.file || j?.filename || j?.data?.path
-        if (typeof path === 'string' && path && !/\s/.test(path)) return path.startsWith('http') ? path : `${CDN_BASE}/${path.replace(/^\/+/, '')}`
+        const path = j?.path || j?.file?.path || j?.file || j?.filename || j?.data?.path
+        if (typeof path === 'string' && path && !/\s/.test(path)) return path.startsWith('http') ? path : `${BASE}/${path.replace(/^\/+/, '')}`
     } catch {}
     const m = t.match(/https?:\/\/[^\s"'<>]+/i)
     return m ? m[0] : null
 }
 
-async function uploadToCdnFile(buffer, fileName, mimetype) {
+async function uploadToDrive(buffer, fileName, mimetype) {
     const form = new FormData()
-    form.append(CDN_FIELD, new Blob([buffer], { type: mimetype }), fileName)
-    const res = await fetch(CDN_UPLOAD, { method: 'POST', body: form, headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(TIMEOUT) })
+    form.append(FIELD, new Blob([buffer], { type: mimetype }), fileName)
+    const res = await fetch(UPLOAD_URL, { method: 'POST', body: form, headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(TIMEOUT) })
     const text = (await res.text()).trim()
     const link = res.ok ? extractLink(text) : null
     if (!link) throw new Error('UPLOAD_FAILED:' + res.status + ' ' + text.slice(0, 120))
@@ -83,8 +83,8 @@ const friendly = (e) => {
 
 cmd({
     pattern: "url",
-    alias: ["tourl", "upload", "cdnfile"],
-    desc: "Upload media to CDNFile and get a link. Usage: reply to media with /url",
+    alias: ["tourl", "upload", "xenodrive"],
+    desc: "Upload media to Xeno Drive and get a link. Usage: reply to media with /url",
     category: "tools",
     react: "🔗",
     filename: __filename
@@ -103,7 +103,7 @@ async (conn, mek, m, { from, q, quoted, prefix, sender, reply }) => {
         const ext = mime.extension(String(mimetype).split(';')[0]) || 'bin'
         const fileName = sel.node.fileName || `xenoxd_${Date.now()}.${ext}`
 
-        const link = await uploadToCdnFile(buffer, fileName, mimetype)
+        const link = await uploadToDrive(buffer, fileName, mimetype)
         await reply(`*${link}*`)
     } catch (e) { console.log('[URL]', e?.message || e); reply(friendly(e)) }
 })
