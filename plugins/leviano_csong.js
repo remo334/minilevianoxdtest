@@ -171,4 +171,126 @@ async function buildWaveform(style, audioFile) {
     let bars = null
     if (style === 'real' && audioFile) bars = await realBars(audioFile)
     if (style === 'heartbeat') {
-        const loud = audioFile ? await realBars
+        const loud = audioFile ? await realBars(audioFile) : null
+        bars = loud || styleBars('pulse')
+    }
+    if (!bars) bars = styleBars(style)
+    return Buffer.from(bars.map(clampBar))
+}
+
+function convertToOpus(inputPath, outputPath) {
+    return new Promise((resolve, reject) => {
+        const args = [
+            '-y',
+            '-i', inputPath,
+            '-c:a', 'libopus',
+            '-b:a', '128k',
+            '-vbr', 'on',
+            '-compression_level', '10',
+            outputPath
+        ]
+        const proc = spawn(FFMPEG, args)
+        const timer = setTimeout(() => {
+            try { proc.kill('SIGKILL') } catch {}
+            reject(new Error('FFmpeg conversion timeout'))
+        }, FFMPEG_TIMEOUT)
+
+        proc.on('error', err => {
+            clearTimeout(timer)
+            reject(err)
+        })
+
+        proc.on('close', code => {
+            clearTimeout(timer)
+            if (code === 0) resolve(outputPath)
+            else reject(new Error(`FFmpeg exited with code ${code}`))
+        })
+    })
+}
+
+cmd({
+    pattern: 'csong',
+    alias: ['customsong', 'cplay'],
+    desc: 'Download song with custom waveform',
+    category: 'download',
+    react: '🎵',
+    filename: __filename
+}, async (conn, mek, m, { from, q, reply }) => {
+    try {
+        if (!q) return await reply('*Please provide a song name or YouTube link!*')
+
+        await reply('*Searching for your song...* 🔎')
+
+        let videoUrl = q
+        let videoTitle = 'Song'
+        let videoThumb = null
+
+        if (!q.startsWith('http')) {
+            const searchRes = await axios.get(`${SEARCH_API}${encodeURIComponent(q)}`)
+            const results = searchRes.data?.results || searchRes.data || []
+            if (!results.length) return await reply('*Song not found!*')
+            videoUrl = results[0].url
+            videoTitle = results[0].title
+            videoThumb = results[0].thumbnail
+        }
+
+        await reply(`*Downloading:* ${videoTitle} ⏳`)
+
+        const dlRes = await axios.get(`${DOWNLOAD_API}${encodeURIComponent(videoUrl)}`)
+        const dlData = dlRes.data?.result || dlRes.data
+        const downloadUrl = dlData?.download?.url || dlData?.url || dlData?.audioUrl
+
+        if (!downloadUrl) return await reply('*Failed to get audio download link!*')
+
+        const tmpDir = os.tmpdir()
+        const rawAudio = path.join(tmpDir, `raw_${Date.now()}.mp3`)
+        const opusAudio = path.join(tmpDir, `voice_${Date.now()}.opus`)
+
+        const writer = fs.createWriteStream(rawAudio)
+        const response = await axios({
+            url: downloadUrl,
+            method: 'GET',
+            responseType: 'stream'
+        })
+
+        await pipeline(response.data, writer)
+
+        await convertToOpus(rawAudio, opusAudio)
+        const waveform = await buildWaveform(DEFAULT_WAVE, rawAudio)
+
+        let contextInfo = {}
+        if (DEFAULT_POSTER && videoThumb) {
+            try {
+                const imgRes = await axios.get(videoThumb, { responseType: 'arraybuffer' })
+                const thumbBuf = await applyWatermark(Buffer.from(imgRes.data))
+                contextInfo = {
+                    externalAdReply: {
+                        title: videoTitle,
+                        body: CONTACT_NAME,
+                        mediaType: 2,
+                        thumbnail: thumbBuf,
+                        sourceUrl: videoUrl
+                    }
+                }
+            } catch (e) {
+                console.error('[CSONG] contextInfo thumb error:', e.message)
+            }
+        }
+
+        await conn.sendMessage(from, {
+            audio: { url: opusAudio },
+            mimetype: 'audio/ogg; codecs=opus',
+            ptt: true,
+            waveform: waveform,
+            contextInfo: Object.keys(contextInfo).length ? contextInfo : undefined
+        }, { quoted: mek })
+
+        // Cleanup temp files
+        try { if (fs.existsSync(rawAudio)) fs.unlinkSync(rawAudio) } catch {}
+        try { if (fs.existsSync(opusAudio)) fs.unlinkSync(opusAudio) } catch {}
+
+    } catch (err) {
+        console.error('[CSONG] Error:', err)
+        await reply(`*Error:* ${err.message}`)
+    }
+})
