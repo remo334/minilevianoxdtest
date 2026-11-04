@@ -1,4 +1,4 @@
-//Leviano Xd
+//Xeno Exe
 
 const axios = require('axios')
 const fs = require('fs')
@@ -16,8 +16,8 @@ const SEARCH_API = 'https://xenoytserch.vercel.app/api/ytsearch?q='
 const DOWNLOAD_API = 'https://xenoytdl-2.vercel.app/api/youtube?url='
 const FFMPEG_TIMEOUT = 120000
 
-const CONTACT_NAME = 'LEVIANO SER'
-const CONTACT_NUMBER = '917907997537'
+const CONTACT_NAME = 'XENO EXE'
+const CONTACT_NUMBER = '918136810956'
 const DEFAULT_POSTER = true
 const DEFAULT_CONTACT = false
 const MAX_MEDIA_BYTES = 60 * 1024 * 1024
@@ -47,9 +47,9 @@ async function applyWatermark(thumbBuffer) {
         const margin = Math.round(base.bitmap.width * WATERMARK_MARGIN_PCT)
         let x, y
         switch (WATERMARK_SIDE) {
-            case 'bottom-left':  x = margin;                                     y = base.bitmap.height - mark.bitmap.height - margin; break
+            case 'bottom-left':  x = margin;                                    y = base.bitmap.height - mark.bitmap.height - margin; break
             case 'top-right':    x = base.bitmap.width - mark.bitmap.width - margin; y = margin; break
-            case 'top-left':     x = margin;                                     y = margin; break
+            case 'top-left':     x = margin;                                    y = margin; break
             case 'bottom-right':
             default:             x = base.bitmap.width - mark.bitmap.width - margin; y = base.bitmap.height - mark.bitmap.height - margin
         }
@@ -64,6 +64,7 @@ async function applyWatermark(thumbBuffer) {
 
 let FFMPEG = 'ffmpeg'
 try { FFMPEG = require('ffmpeg-static') || 'ffmpeg' } catch {}
+if (process.env.FFMPEG_PATH) FFMPEG = process.env.FFMPEG_PATH
 
 function getYouTubeId(url) {
     const re = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=|shorts\/)([^#\&\?]*).*/
@@ -172,125 +173,246 @@ async function buildWaveform(style, audioFile) {
     if (style === 'real' && audioFile) bars = await realBars(audioFile)
     if (style === 'heartbeat') {
         const loud = audioFile ? await realBars(audioFile) : null
-        bars = loud || styleBars('pulse')
+        bars = styleBars('ecg').map((v, i) => loud ? v * (0.35 + 0.65 * (loud[i] / 100)) : v)
     }
-    if (!bars) bars = styleBars(style)
-    return Buffer.from(bars.map(clampBar))
+    if (!bars) bars = styleBars(style === 'real' ? 'equalizer' : style)
+    return new Uint8Array(bars.map(clampBar))
 }
 
-function convertToOpus(inputPath, outputPath) {
+const toSeconds = (d) => String(d || '').split(':').reduce((a, b) => a * 60 + (Number(b) || 0), 0)
+
+const YT_RE = /(youtu\.be|youtube\.com)/i
+
+function findDownloadUrl(obj) {
+    const preferred = ['download', 'downloadUrl', 'download_url', 'dl', 'link', 'audio', 'mp3', 'url', 'src']
+    const seen = new Set()
+    const walk = (o, depth = 0) => {
+        if (o == null || depth > 5) return null
+        if (typeof o === 'string') return (/^https?:\/\//i.test(o) && !YT_RE.test(o)) ? o : null
+        if (typeof o !== 'object' || seen.has(o)) return null
+        seen.add(o)
+        for (const k of preferred) if (k in o) { const r = walk(o[k], depth + 1); if (r) return r }
+        for (const k of Object.keys(o)) { const r = walk(o[k], depth + 1); if (r) return r }
+        return null
+    }
+    return walk(obj)
+}
+
+async function withTemp(fn) {
+    const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'csong-' + crypto.randomBytes(3).toString('hex') + '-'))
+    try { return await fn(dir) }
+    finally { fs.promises.rm(dir, { recursive: true, force: true }).catch(() => {}) }
+}
+
+function runFfmpeg(args) {
     return new Promise((resolve, reject) => {
-        const args = [
-            '-y',
-            '-i', inputPath,
-            '-c:a', 'libopus',
-            '-b:a', '128k',
-            '-vbr', 'on',
-            '-compression_level', '10',
-            outputPath
-        ]
-        const proc = spawn(FFMPEG, args)
-        const timer = setTimeout(() => {
-            try { proc.kill('SIGKILL') } catch {}
-            reject(new Error('FFmpeg conversion timeout'))
-        }, FFMPEG_TIMEOUT)
-
-        proc.on('error', err => {
+        let ff
+        try { ff = spawn(FFMPEG, ['-y', '-v', 'error', ...args], { stdio: ['ignore', 'ignore', 'pipe'] }) }
+        catch (e) { return reject(e) }
+        let err = ''
+        const timer = setTimeout(() => { try { ff.kill('SIGKILL') } catch {} reject(new Error('FFMPEG_TIMEOUT')) }, FFMPEG_TIMEOUT)
+        ff.stderr.on('data', c => { err = (err + c).slice(-1500) })
+        ff.on('error', e => { clearTimeout(timer); reject(e) })
+        ff.on('close', code => {
             clearTimeout(timer)
-            reject(err)
-        })
-
-        proc.on('close', code => {
-            clearTimeout(timer)
-            if (code === 0) resolve(outputPath)
-            else reject(new Error(`FFmpeg exited with code ${code}`))
+            code === 0 ? resolve() : reject(new Error('FFMPEG_FAILED: ' + err.trim()))
         })
     })
 }
 
+async function searchSong(query) {
+    const { data } = await axios.get(SEARCH_API + encodeURIComponent(query), { timeout: 30000 })
+    const first = data?.results?.[0]
+    if (!first || !first.url) throw new Error('NO_RESULT')
+    return first
+}
+
+async function fetchBuffer(url, maxBytes = MAX_MEDIA_BYTES) {
+    const res = await axios.get(url, {
+        responseType: 'stream',
+        timeout: 120000,
+        maxRedirects: 5,
+        headers: { 'User-Agent': 'Mozilla/5.0' }
+    })
+    const type = String(res.headers['content-type'] || '')
+    if (/text\/|html|json/i.test(type)) { res.data.destroy(); throw new Error('API_FAIL') }
+    if (Number(res.headers['content-length']) > maxBytes) { res.data.destroy(); throw new Error('FILE_TOO_LARGE') }
+    const chunks = []
+    let size = 0
+    for await (const c of res.data) {
+        size += c.length
+        if (size > maxBytes) { res.data.destroy(); throw new Error('FILE_TOO_LARGE') }
+        chunks.push(c)
+    }
+    return Buffer.concat(chunks)
+}
+
+async function downloadViaApi(videoUrl) {
+    const { data } = await axios.get(DOWNLOAD_API + encodeURIComponent(videoUrl) + '&format=mp3', { timeout: 90000 })
+    if (data?.status === false || data?.success === false) throw new Error('API_FAIL')
+    const link = findDownloadUrl(data)
+    if (!link) throw new Error('API_FAIL')
+    return fetchBuffer(link)
+}
+
+async function downloadSong(videoUrl) {
+    try {
+        return await downloadViaApi(videoUrl)
+    } catch (e) {
+        if (e?.message === 'FILE_TOO_LARGE') throw e
+        console.log('[CSONG] api download failed:', e?.message || e)
+    }
+    let ytdlpDownload
+    try { ({ ytdlpDownload } = require('../lib/ytdlp')) } catch { throw new Error('API_FAIL') }
+    return (await ytdlpDownload(videoUrl, { kind: 'audio', maxBytes: MAX_MEDIA_BYTES })).buffer
+}
+
+async function downloadQuotedAudio(audioNode) {
+    const stream = await downloadContentFromMessage(audioNode, 'audio')
+    const chunks = []
+    let size = 0
+    for await (const c of stream) {
+        size += c.length
+        if (size > MAX_MEDIA_BYTES) throw new Error('FILE_TOO_LARGE')
+        chunks.push(c)
+    }
+    return Buffer.concat(chunks)
+}
+
+async function toVoiceNote(buffer, style) {
+    return withTemp(async (dir) => {
+        const inFile = path.join(dir, 'in.bin')
+        const outFile = path.join(dir, 'out.ogg')
+        await fs.promises.writeFile(inFile, buffer)
+        await runFfmpeg(['-i', inFile, '-vn', '-map_metadata', '-1', '-c:a', 'libopus', '-b:a', '64k', '-ar', '48000', '-ac', '1', '-f', 'ogg', outFile])
+        const ogg = await fs.promises.readFile(outFile)
+        const waveform = await buildWaveform(style, outFile)
+        return { ogg, waveform }
+    })
+}
+
+async function getThumb(url) {
+    if (!url) return null
+    try {
+        const { data } = await axios.get(url, { responseType: 'arraybuffer', timeout: 20000 })
+        return await applyWatermark(Buffer.from(data))
+    } catch (e) {
+        console.log('[CSONG] thumbnail failed:', e.message)
+        return null
+    }
+}
+
+const CHANNEL_LINK_RE = /whatsapp\.com\/channel\/([A-Za-z0-9_-]+)/i
+const NEWSLETTER_JID_RE = /^\d+@newsletter$/i
+
+async function resolveChannel(conn, target) {
+    const t = String(target || '').trim()
+    if (NEWSLETTER_JID_RE.test(t)) return { jid: t.toLowerCase(), name: null }
+    const m = t.match(CHANNEL_LINK_RE)
+    if (m) {
+        const meta = await conn.newsletterMetadata('invite', m[1])
+        if (!meta?.id) throw new Error('CHANNEL_NOT_FOUND')
+        return { jid: meta.id, name: meta.name ?? meta.thread_metadata?.name?.text ?? null }
+    }
+    throw new Error('BAD_TARGET')
+}
+
+function parseInput(q) {
+    let text = String(q || '').trim()
+    let wave = DEFAULT_WAVE
+    const w = text.match(/\s*--(?:wave|w)[=\s]+([a-z]+)\s*/i)
+    if (w) {
+        if (WAVE_STYLES.includes(w[1].toLowerCase())) wave = w[1].toLowerCase()
+        text = (text.slice(0, w.index) + ' ' + text.slice(w.index + w[0].length)).trim()
+    }
+    const i = text.indexOf(',')
+    if (i === -1) return { target: text, song: '', wave }
+    return { target: text.slice(0, i).trim(), song: text.slice(i + 1).trim(), wave }
+}
+
+function posterCaption(v, botName) {
+    return `*${v.title || 'Song'}*\n\n` +
+        `࿇ ${v.channel || v.author?.name || 'Unknown'}\n` +
+        `࿇ ${v.duration || v.timestamp || '-'}\n` +
+        (v.views ? `࿇ ${v.views}\n` : '') +
+        `\n_${botName}_`
+}
+
+function friendly(e) {
+    const msg = String(e?.message || e)
+    if (msg === 'NO_RESULT') return 'No song found for that name.'
+    if (msg === 'BAD_TARGET') return 'That is not a channel link or channel JID.'
+    if (msg === 'CHANNEL_NOT_FOUND') return 'Channel not found. Check the link.'
+    if (msg === 'FILE_TOO_LARGE') return 'That file is too large.'
+    if (msg === 'TOO_LONG') return 'That song is too long.'
+    if (msg === 'NO_AUDIO') return 'The replied message is not an audio.'
+    if (msg.startsWith('FFMPEG')) return 'Could not convert the audio. Try another song.'
+    return 'Could not send the song. Try again.'
+}
+
+const MAX_MINUTES = 15
+
 cmd({
     pattern: 'csong',
-    alias: ['customsong', 'cplay'],
-    desc: 'Download song with custom waveform',
-    category: 'download',
+    alias: ['csend', 'channelsong'],
+    desc: 'Send a song to a WhatsApp channel.',
+    category: 'owner',
     react: '🎵',
     filename: __filename
-}, async (conn, mek, m, { from, q, reply }) => {
+},
+async (conn, mek, m, { from, q, quoted, prefix, isOwner, isSudo, getSettings, reply }) => {
     try {
-        if (!q) return await reply('*Please provide a song name or YouTube link!*')
+        if (!isOwner && !isSudo) return reply('Only the bot owner can use this command.')
 
-        await reply('*Searching for your song...* 🔎')
+        const { target, song, wave } = parseInput(q)
+        const audioNode = quoted && !Array.isArray(quoted) ? (quoted.audioMessage || quoted.message?.audioMessage) : null
 
-        let videoUrl = q
-        let videoTitle = 'Song'
-        let videoThumb = null
-
-        if (!q.startsWith('http')) {
-            const searchRes = await axios.get(`${SEARCH_API}${encodeURIComponent(q)}`)
-            const results = searchRes.data?.results || searchRes.data || []
-            if (!results.length) return await reply('*Song not found!*')
-            videoUrl = results[0].url
-            videoTitle = results[0].title
-            videoThumb = results[0].thumbnail
+        if (!target || (!song && !audioNode)) {
+            return reply(
+                `Usage:\n` +
+                `${prefix}csong <channel link/jid> , <song name>\n` +
+                `Reply to an audio: ${prefix}csong <channel link/jid>\n` +
+                `Optional: --wave <${WAVE_STYLES.join('|')}>`
+            )
         }
 
-        await reply(`*Downloading:* ${videoTitle} ⏳`)
+        const channel = await resolveChannel(conn, target)
+        const botName = (await getSettings()).botName || config.BOT_NAME
 
-        const dlRes = await axios.get(`${DOWNLOAD_API}${encodeURIComponent(videoUrl)}`)
-        const dlData = dlRes.data?.result || dlRes.data
-        const downloadUrl = dlData?.download?.url || dlData?.url || dlData?.audioUrl
-
-        if (!downloadUrl) return await reply('*Failed to get audio download link!*')
-
-        const tmpDir = os.tmpdir()
-        const rawAudio = path.join(tmpDir, `raw_${Date.now()}.mp3`)
-        const opusAudio = path.join(tmpDir, `voice_${Date.now()}.opus`)
-
-        const writer = fs.createWriteStream(rawAudio)
-        const response = await axios({
-            url: downloadUrl,
-            method: 'GET',
-            responseType: 'stream'
-        })
-
-        await pipeline(response.data, writer)
-
-        await convertToOpus(rawAudio, opusAudio)
-        const waveform = await buildWaveform(DEFAULT_WAVE, rawAudio)
-
-        let contextInfo = {}
-        if (DEFAULT_POSTER && videoThumb) {
-            try {
-                const imgRes = await axios.get(videoThumb, { responseType: 'arraybuffer' })
-                const thumbBuf = await applyWatermark(Buffer.from(imgRes.data))
-                contextInfo = {
-                    externalAdReply: {
-                        title: videoTitle,
-                        body: CONTACT_NAME,
-                        mediaType: 2,
-                        thumbnail: thumbBuf,
-                        sourceUrl: videoUrl
-                    }
-                }
-            } catch (e) {
-                console.error('[CSONG] contextInfo thumb error:', e.message)
-            }
+        let video = null
+        let raw
+        if (audioNode) {
+            raw = await downloadQuotedAudio(audioNode)
+        } else {
+            video = await searchSong(song)
+            if (toSeconds(video.duration || video.timestamp) > MAX_MINUTES * 60) throw new Error('TOO_LONG')
+            await reply(`Sending *${video.title}* to ${channel.name || channel.jid} ...`)
+            raw = await downloadSong(video.url)
         }
 
-        await conn.sendMessage(from, {
-            audio: { url: opusAudio },
+        const { ogg, waveform } = await toVoiceNote(raw, wave)
+
+        if (video && DEFAULT_POSTER) {
+            const thumb = await getThumb(video.thumbnail)
+            if (thumb) await conn.sendMessage(channel.jid, { image: thumb, caption: posterCaption(video, botName) })
+            else await conn.sendMessage(channel.jid, { text: posterCaption(video, botName) })
+        }
+
+        if (DEFAULT_CONTACT) {
+            const vcard = `BEGIN:VCARD\nVERSION:3.0\nFN:${CONTACT_NAME}\nTEL;type=CELL;waid=${CONTACT_NUMBER}:+${CONTACT_NUMBER}\nEND:VCARD`
+            await conn.sendMessage(channel.jid, { contacts: { displayName: CONTACT_NAME, contacts: [{ vcard }] } })
+        }
+
+        await conn.sendMessage(channel.jid, {
+            audio: ogg,
             mimetype: 'audio/ogg; codecs=opus',
             ptt: true,
-            waveform: waveform,
-            contextInfo: Object.keys(contextInfo).length ? contextInfo : undefined
-        }, { quoted: mek })
+            waveform
+        })
 
-        // Cleanup temp files
-        try { if (fs.existsSync(rawAudio)) fs.unlinkSync(rawAudio) } catch {}
-        try { if (fs.existsSync(opusAudio)) fs.unlinkSync(opusAudio) } catch {}
-
-    } catch (err) {
-        console.error('[CSONG] Error:', err)
-        await reply(`*Error:* ${err.message}`)
+        await reply(`Sent to ${channel.name || channel.jid} ✅`)
+    } catch (e) {
+        console.log('[CSONG]', e)
+        reply(friendly(e))
     }
 })
