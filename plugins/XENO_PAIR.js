@@ -2,7 +2,7 @@
 const axios = require('axios')
 const { cmd } = require('../command')
 
-const PAIR_URL = 'https://xeno-xd.zone.id/'
+const PAIR_URL = 'https://minilevianoxdtest-production.up.railway.app/#pair/'
 const PAIR_API = (process.env.PAIR_URL || PAIR_URL).replace(/\/+$/, '')
 const COOLDOWN_MS = 30000
 const lastUse = new Map()
@@ -25,8 +25,8 @@ async (conn, mek, m, { from, q, prefix, sender, reply }) => {
             return reply(
                 `*ᴘᴀɪʀ ʏᴏᴜʀ ɴᴜᴍʙᴇʀ*\n\n` +
                 `Send your number with the country code:\n` +
-                `│ ➱ ${prefix}pair 919876543210\n` +
-                `│ ➱ ${prefix}pair 919876543210 2  (pick Server 2)\n\n` +
+                `│ ➱ ${prefix}pair 917907997537\n` +
+                `│ ➱ ${prefix}pair 91884863xxxx 2  (pick Server 2)\n\n` +
                 `Or use the website:\n│ ✦ ${PAIR_URL}`
             )
         }
