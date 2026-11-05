@@ -41,36 +41,97 @@ async function download(sel) {
 }
 
 const BASE = (process.env.XENODRIVE_BASE || 'https://xenoexex.onrender.com').replace(/\/+$/, '')
-const UPLOAD_URL = process.env.XENODRIVE_UPLOAD_URL || `${BASE}/api/upload`
-const FIELD = process.env.XENODRIVE_FIELD || 'file'
+const CHUNK = 8 * 1024 * 1024
 const UA = 'Mozilla/5.0 (compatible; XenoXD/1.0)'
-const TIMEOUT = 180000
+const TIMEOUT = 120000
+const POLL_MS = 1000
+const POLL_MAX = 180
 
 const isUrl = (t) => /^https?:\/\/\S+$/i.test(String(t || '').trim())
+const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 
-function extractLink(text) {
-    const t = String(text || '').trim()
-    if (isUrl(t)) return t
-    try {
-        const j = JSON.parse(t)
-        const cand = j?.url || j?.link || j?.shareUrl || j?.share_url || j?.downloadUrl || j?.download_url || j?.file?.url || j?.file_url || j?.fileUrl || j?.data?.url || j?.data?.link ||
-            j?.result?.url || j?.files?.[0]?.url || (Array.isArray(j) ? j[0]?.url || j[0] : null)
-        if (isUrl(cand)) return String(cand).trim()
-        const path = j?.path || j?.file?.path || j?.file || j?.filename || j?.data?.path
-        if (typeof path === 'string' && path && !/\s/.test(path)) return path.startsWith('http') ? path : `${BASE}/${path.replace(/^\/+/, '')}`
-    } catch {}
-    const m = t.match(/https?:\/\/[^\s"'<>]+/i)
-    return m ? m[0] : null
+async function api(path, opts = {}) {
+    const res = await fetch(BASE + path, {
+        ...opts,
+        headers: { 'User-Agent': UA, ...(opts.headers || {}) },
+        signal: AbortSignal.timeout(TIMEOUT)
+    })
+    const text = await res.text()
+    let json = null
+    try { json = JSON.parse(text) } catch {}
+    if (!res.ok || json?.error) throw new Error('UPLOAD_FAILED:' + res.status + ' ' + (json?.error || text.slice(0, 120)))
+    return json || {}
+}
+
+function findLink(o) {
+    if (!o || typeof o !== 'object') return null
+    const f = o.file && typeof o.file === 'object' ? o.file : o
+    const cand = [o.link, o.url, o.shareUrl, o.share_url, o.shareLink, f.link, f.url, f.shareUrl, f.share_url, f.shareLink]
+    for (const c of cand) {
+        if (typeof c !== 'string' || !c.trim()) continue
+        const v = c.trim()
+        if (isUrl(v)) return v
+        if (v.startsWith('/')) return BASE + v
+    }
+    return null
 }
 
 async function uploadToDrive(buffer, fileName, mimetype) {
-    const form = new FormData()
-    form.append(FIELD, new Blob([buffer], { type: mimetype }), fileName)
-    const res = await fetch(UPLOAD_URL, { method: 'POST', body: form, headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(TIMEOUT) })
-    const text = (await res.text()).trim()
-    const link = res.ok ? extractLink(text) : null
-    if (!link) throw new Error('UPLOAD_FAILED:' + res.status + ' ' + text.slice(0, 120))
-    return link
+    const init = await api('/api/upload/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: fileName, size: buffer.length, mime: mimetype })
+    })
+    const id = init.id
+    if (!id) throw new Error('UPLOAD_FAILED:init')
+
+    try {
+        for (let i = 0; i * CHUNK < buffer.length; i++) {
+            await api(`/api/upload/${id}/chunk?index=${i}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/octet-stream' },
+                body: buffer.subarray(i * CHUNK, (i + 1) * CHUNK)
+            })
+        }
+        await api(`/api/upload/${id}/complete`, { method: 'POST' })
+    } catch (e) {
+        api(`/api/upload/${id}`, { method: 'DELETE' }).catch(() => {})
+        throw e
+    }
+
+    let st = {}
+    for (let i = 0; i < POLL_MAX; i++) {
+        await sleep(POLL_MS)
+        st = await api(`/api/upload/${id}`)
+        if (st.status === 'done' || st.status === 'error') break
+    }
+    if (st.status === 'error') throw new Error('UPLOAD_FAILED:' + (st.error || 'processing'))
+    if (st.status !== 'done') throw new Error('timeout')
+
+    let fileId = st.fileId ?? st.file_id ?? st.file?.id ?? st.fileID ?? null
+    const direct = findLink(st)
+    if (!fileId && direct) return direct
+
+    if (!fileId) {
+        const list = await api('/api/files?view=files')
+        const arr = Array.isArray(list) ? list : (list.files || [])
+        const hit = arr.find(f => f.name === fileName && Number(f.size) === buffer.length) || arr.find(f => f.name === fileName)
+        fileId = hit?.id ?? null
+        const l = findLink(hit)
+        if (!fileId && l) return l
+    }
+    if (!fileId) throw new Error('UPLOAD_FAILED:no file id')
+
+    try {
+        const shared = await api(`/api/files/${fileId}/share`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        })
+        const l = findLink(shared)
+        if (l) return l
+    } catch {}
+    return `${BASE}/api/files/${fileId}/stream`
 }
 
 const friendly = (e) => {
