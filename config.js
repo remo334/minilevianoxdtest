@@ -12,6 +12,8 @@ module.exports = {
         1: { name: "Server 1", maxBots: 50 },
         2: { name: "Server 2", maxBots: 50 }
     },
+    // Public URL of this bot's web server (used by game links), e.g. https://yourapp.example.com
+    BASE_URL: process.env.BASE_URL || process.env.RENDER_EXTERNAL_URL || "https://minilevianoxdtest-production.up.railway.app",
     MODE: "private",
     AUTO_READ_STATUS: true,
     AUTO_REACT: false,
