@@ -1,0 +1,15 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>❌ Tic Tac Toe</title><style>*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;touch-action:manipulation}html,body{margin:0;height:100%;background:#0b0f1a;color:#e8ecff;font-family:system-ui,sans-serif}body{display:flex;justify-content:center}#app{width:100%;max-width:440px;height:100%;padding:12px;display:flex;flex-direction:column;gap:10px}header{display:flex;justify-content:space-between;align-items:center}h1{margin:0;font-size:22px}.b{border:1px solid #2a3560;border-radius:12px;padding:6px 14px;background:#111830;color:#ffd75e;font-weight:700}button.big{padding:10px 26px;font-size:16px;font-weight:700;border:0;border-radius:12px;background:#6c8cff;color:#fff}#msg{text-align:center;min-height:24px}
+#g{width:100%;max-width:360px;margin:auto;display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.c{aspect-ratio:1;border:0;border-radius:16px;font-size:56px;font-weight:800;background:#1a2550;color:#fff}.c.w{background:#1f6f45}</style></head><body><div id="app"><header><h1>❌ TIC TAC TOE</h1><div class="b" id="sc">You 0 · AI 0</div></header><div id="g"></div><div id="msg">You are ❌ — tap a square</div><button class="big" id="r">NEW ROUND</button></div>
+<script>
+const L=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];let B,over,w=0,l=0;const g=document.getElementById('g'),m=document.getElementById('msg');
+const win=(b,p)=>L.find(t=>t.every(i=>b[i]===p));
+function mm(b,p){if(win(b,'O'))return{s:1};if(win(b,'X'))return{s:-1};if(b.every(Boolean))return{s:0};
+ let best={s:p==='O'?-2:2};b.forEach((v,i)=>{if(v)return;b[i]=p;const r=mm(b,p==='O'?'X':'O');b[i]='';if(p==='O'?r.s>best.s:r.s<best.s)best={s:r.s,i}});return best}
+function draw(){g.innerHTML='';B.forEach((v,i)=>{const c=document.createElement('button');c.className='c';c.textContent=v==='X'?'❌':v==='O'?'⭕':'';c.onclick=()=>play(i);g.appendChild(c)})}
+function end(){const t=win(B,'X')||win(B,'O');if(t){over=1;t.forEach(i=>g.children[i].classList.add('w'));if(B[t[0]]==='X'){w++;m.textContent='🎉 You win!'}else{l++;m.textContent='🤖 AI wins'}document.getElementById('sc').textContent='You '+w+' · AI '+l;return 1}
+ if(B.every(Boolean)){over=1;m.textContent='🤝 Draw';return 1}}
+function play(i){if(over||B[i])return;B[i]='X';draw();if(end())return;const r=mm(B,'O');B[r.i]='O';draw();end()}
+function start(){B=Array(9).fill('');over=0;m.textContent='You are ❌ — tap a square';draw()}
+document.getElementById('r').onclick=start;start();
+</script></body></html>

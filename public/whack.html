@@ -1,0 +1,16 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>🔨 Whack a Mole</title><style>*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;touch-action:manipulation}html,body{margin:0;height:100%;background:#0b0f1a;color:#e8ecff;font-family:system-ui,sans-serif}body{display:flex;justify-content:center}#app{width:100%;max-width:440px;height:100%;padding:12px;display:flex;flex-direction:column;gap:10px}header{display:flex;justify-content:space-between;align-items:center}h1{margin:0;font-size:22px}.b{border:1px solid #2a3560;border-radius:12px;padding:6px 14px;background:#111830;color:#ffd75e;font-weight:700}button.big{padding:10px 26px;font-size:16px;font-weight:700;border:0;border-radius:12px;background:#6c8cff;color:#fff}#msg{text-align:center;min-height:24px}
+#g{flex:1;min-height:0;display:grid;grid-template-columns:repeat(3,1fr);gap:10px;align-content:center}
+.h{aspect-ratio:1;border:0;border-radius:50%;background:#3b2a1a;font-size:48px;box-shadow:inset 0 -8px 0 #24180e}</style></head><body><div id="app"><header><h1>🔨 WHACK A MOLE</h1><div class="b" id="sc">0 · 0 · 30s</div></header><div id="g"></div><div id="msg">Hit the 🐹 — avoid 💣!</div><button class="big" id="r">START</button></div>
+<script>
+let best=0;try{best=+localStorage.getItem('whackBest')||0}catch(e){}
+const g=document.getElementById('g'),m=document.getElementById('msg');let score=0,t=30,run=0,up=[],tm,sp;
+for(let i=0;i<9;i++){const h=document.createElement('button');h.className='h';h.onclick=()=>hit(i);g.appendChild(h)}
+const H=[...g.children];
+function ui(){document.getElementById('sc').textContent=score+' · '+best+' · '+t+'s'}
+function hit(i){if(!run||!up[i])return;if(up[i]==='🐹')score++;else score=Math.max(0,score-3);up[i]=0;H[i].textContent='';ui()}
+function pop(){if(!run)return;const i=Math.random()*9|0;if(!up[i]){up[i]=Math.random()<.2?'💣':'🐹';H[i].textContent=up[i];setTimeout(()=>{up[i]=0;H[i].textContent=''},Math.max(450,900-score*12))}
+ sp=setTimeout(pop,Math.max(250,650-score*10))}
+function start(){score=0;t=30;run=1;up=[];H.forEach(h=>h.textContent='');m.textContent='Go go go!';ui();clearInterval(tm);clearTimeout(sp);pop();
+ tm=setInterval(()=>{t--;ui();if(t<=0){clearInterval(tm);clearTimeout(sp);run=0;H.forEach(h=>h.textContent='');if(score>best){best=score;try{localStorage.setItem('whackBest',best)}catch(e){}}ui();m.textContent='⏱️ Time! Score '+score}},1000)}
+document.getElementById('r').onclick=start;ui();
+</script></body></html>

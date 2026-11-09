@@ -1,0 +1,27 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>🐤 Flappy Xeno</title><style>*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;touch-action:manipulation}html,body{margin:0;height:100%;background:#0b0f1a;color:#e8ecff;font-family:system-ui,sans-serif}body{display:flex;justify-content:center}#app{width:100%;max-width:440px;height:100%;padding:12px;display:flex;flex-direction:column;gap:10px}header{display:flex;justify-content:space-between;align-items:center}h1{margin:0;font-size:22px}.b{border:1px solid #2a3560;border-radius:12px;padding:6px 14px;background:#111830;color:#ffd75e;font-weight:700}button.big{padding:10px 26px;font-size:16px;font-weight:700;border:0;border-radius:12px;background:#6c8cff;color:#fff}#msg{text-align:center;min-height:24px}
+canvas{flex:1;min-height:0;width:100%;border:2px solid #2a3560;border-radius:18px;background:#7ad7ff;touch-action:none}</style></head><body><div id="app"><header><h1>🐤 FLAPPY XENO</h1><div class="b" id="sc">0 · 0</div></header><canvas id="c" width="360" height="560"></canvas><div id="msg">Tap to flap</div></div>
+<script>
+const cv=document.getElementById('c'),x=cv.getContext('2d'),W=360,H=560;
+let best=0;try{best=+localStorage.getItem('flapBest')||0}catch(e){}
+let y,v,pipes,score,state='idle',f=0;
+function reset(){y=H/2;v=0;pipes=[];score=0;f=0;ui()}
+function ui(){document.getElementById('sc').textContent=score+' · '+best}
+function flap(){if(state==='idle'||state==='dead'){reset();state='run';document.getElementById('msg').textContent='';return}v=-7.2}
+function die(){state='dead';if(score>best){best=score;try{localStorage.setItem('flapBest',best)}catch(e){}}ui();document.getElementById('msg').textContent='💥 Score '+score+' — tap to retry'}
+function tick(){
+ if(state==='run'){f++;v+=.45;y+=v;
+  if(f%90===1)pipes.push({x:W,gap:140+Math.random()*(H-340)|0,s:0});
+  pipes.forEach(p=>p.x-=2.6);pipes=pipes.filter(p=>p.x>-60);
+  for(const p of pipes){
+   if(!p.s&&p.x+50<60){p.s=1;score++;ui()}
+   if(74>p.x&&46<p.x+50&&(y-14<p.gap||y+14>p.gap+150))die()}
+  if(y>H-14||y<-40)die()}
+ x.fillStyle='#7ad7ff';x.fillRect(0,0,W,H);
+ x.fillStyle='#4cc15c';pipes.forEach(p=>{x.fillRect(p.x,0,50,p.gap);x.fillRect(p.x,p.gap+150,50,H)});
+ x.fillStyle='#d8b46a';x.fillRect(0,H-6,W,6);
+ x.font='30px serif';x.textAlign='center';x.textBaseline='middle';x.save();x.translate(60,y);x.rotate(Math.max(-.5,Math.min(1,v/12)));x.fillText('🐤',0,0);x.restore();
+ requestAnimationFrame(tick)}
+reset();tick();
+cv.addEventListener('pointerdown',e=>{e.preventDefault();flap()});
+addEventListener('keydown',e=>{if(e.key===' '||e.key==='ArrowUp')flap()});
+</script></body></html>
