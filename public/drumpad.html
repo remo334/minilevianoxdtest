@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>🎵 Beat Maker</title>
+<meta property="og:title" content="🎵 BEAT MAKER">
+<meta property="og:description" content="Tap pads · REC 4s · it loops automatically!">
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;touch-action:manipulation}
+html,body{margin:0;min-height:100%;background:#12061f;color:#e9dcff;font-family:system-ui,sans-serif}
+body{display:flex;justify-content:center;background:radial-gradient(circle at 50% 0,#2a0f4a,#0d0418 70%)}
+#app{width:100%;max-width:440px;padding:16px;display:flex;flex-direction:column;gap:14px}
+header{display:flex;align-items:center;gap:14px}
+.logo{width:56px;height:56px;border-radius:16px;background:#000;display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:9px}
+.logo i{border-radius:5px}
+h1{margin:0;font-size:24px;color:#ff6fd0;letter-spacing:1px}
+.sub{font-size:10px;letter-spacing:3px;color:#8a6ec0;margin-top:3px}
+#mute{margin-left:auto;width:54px;height:54px;border-radius:16px;border:1px solid #3b2a66;background:#1a0d33;font-size:22px;color:#fff}
+#dots{display:flex;justify-content:center;gap:5px;height:14px;align-items:center}
+#dots i{width:10px;height:10px;border-radius:50%;background:#5a3f86;transition:.08s}
+#dots i.on{background:#ffd75e;transform:scale(1.35)}
+.row{display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:700;color:#b6a0e8}
+.row .dot{display:inline-block;width:11px;height:11px;border-radius:50%;background:#777;margin-right:7px}
+.row.rec .dot{background:#ff3b3b}.row.loop .dot{background:#34d96b}
+#hits{color:#ffd75e}
+#grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.pad{aspect-ratio:1;border-radius:20px;border:0;font-size:36px;color:#fff;box-shadow:inset 0 2px 0 rgba(255,255,255,.35),0 6px 0 rgba(0,0,0,.35);transition:transform .06s,filter .06s}
+.pad.hit{transform:translateY(4px) scale(.95);filter:brightness(1.4)}
+#ctl{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+#ctl button{height:54px;border:0;border-radius:14px;font-weight:800;font-size:14px;letter-spacing:1px;color:#fff;box-shadow:0 5px 0 rgba(0,0,0,.35)}
+#bar{height:6px;border-radius:3px;background:#2a1a4a;overflow:hidden}
+#bar b{display:block;height:100%;width:0;background:#ff6fd0}
+.hint{text-align:center;font-size:12px;color:#8a6ec0;line-height:1.5}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="logo"><i style="background:#ff4fb8"></i><i style="background:#ffd23e"></i><i style="background:#3ee8ff"></i><i style="background:#b57bff"></i></div>
+    <div><h1>BEAT MAKER</h1><div class="sub">DRUM PAD · REC 4S · LOOP</div></div>
+    <button id="mute">🔊</button>
+  </header>
+  <div id="dots"></div>
+  <div class="row" id="mode"><span><i class="dot"></i><span id="modeT">FREE MODE</span></span><span id="hits">0 hit</span></div>
+  <div id="grid"></div>
+  <div id="ctl">
+    <button id="rec" style="background:#e0323c">● REC</button>
+    <button id="play" style="background:#22b455">▶ PLAY</button>
+    <button id="stop" style="background:#7a7f8c">■ STOP</button>
+    <button id="clr" style="background:#4f2f9c">✖ CLR</button>
+  </div>
+  <div id="bar"><b></b></div>
+  <div class="hint">Tap a pad to play · press <b>REC</b>, play for 4 seconds → it becomes a loop · keep playing over it!<br>Keys: 1-4 / Q-R / A-F / Z-V</div>
+</div>
+<script>
+(()=>{
+const EMO=['🥁','💥','👏','🎩','🌀','🪘','💠','🎆','🔔','🎹','🎸','🎺','⭐','🎵','✨','⚡'];
+const COL=['#ff4fb8,#c2207e','#3ec8ff,#1d6fd0','#ffcf3e,#d98a0c','#a56bff,#5a2ec2','#2fd2e8,#1478b8','#ff9a4d,#c9531a','#3ede7a,#13923f','#ff5a5a,#b31f2b','#d58bff,#8a3ad1','#6aa8ff,#3a63c9','#ffd84d,#d19a0b','#b585ff,#6c3bd6','#3ef2c0,#12a07e','#ffa95a,#d0661a','#c79bff,#7e4ad6','#6ab4ff,#2f55d0'];
+const KEYS='1234qwerasdfzxcv';
+const LOOP=4;
+let ac=null,master=null,muted=false,hits=0;
+const grid=document.getElementById('grid'),dotsEl=document.getElementById('dots');
+const pads=[];
+EMO.forEach((e,i)=>{const b=document.createElement('button');b.className='pad';b.textContent=e;
+  const[c1,c2]=COL[i].split(',');b.style.background=`linear-gradient(160deg,${c1},${c2})`;
+  b.addEventListener('pointerdown',ev=>{ev.preventDefault();press(i)});grid.appendChild(b);pads.push(b)});
+const dots=[];for(let i=0;i<16;i++){const d=document.createElement('i');dotsEl.appendChild(d);dots.push(d)}
+
+function init(){if(ac)return;ac=new (window.AudioContext||window.webkitAudioContext)();master=ac.createGain();master.gain.value=.8;master.connect(ac.destination);
+  const len=ac.sampleRate;nb=ac.createBuffer(1,len,ac.sampleRate);const d=nb.getChannelData(0);for(let i=0;i<len;i++)d[i]=Math.random()*2-1}
+let nb;
+function env(g,t,a,d,v=1){g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(v,t+a);g.gain.exponentialRampToValueAtTime(.001,t+a+d)}
+function osc(type,f1,f2,t,dur,vol=.6,filt){const o=ac.createOscillator(),g=ac.createGain();o.type=type;o.frequency.setValueAtTime(f1,t);if(f2)o.frequency.exponentialRampToValueAtTime(f2,t+dur);
+  env(g,t,.005,dur,vol);let n=o;if(filt){const f=ac.createBiquadFilter();f.type='lowpass';f.frequency.value=filt;o.connect(f);n=f}n.connect(g);g.connect(master);o.start(t);o.stop(t+dur+.05)}
+function noise(t,dur,type,freq,vol=.5,f2){const s=ac.createBufferSource();s.buffer=nb;const f=ac.createBiquadFilter();f.type=type;f.frequency.setValueAtTime(freq,t);if(f2)f.frequency.exponentialRampToValueAtTime(f2,t+dur);const g=ac.createGain();env(g,t,.003,dur,vol);s.connect(f);f.connect(g);g.connect(master);s.start(t);s.stop(t+dur+.05)}
+const note=(f,t,type='sine',d=.4,v=.4)=>osc(type,f,0,t,d,v);
+const SND=[
+ t=>osc('sine',160,40,t,.35,1),
+ t=>{noise(t,.18,'highpass',1500,.7);osc('triangle',220,120,t,.12,.4)},
+ t=>{for(let i=0;i<3;i++)noise(t+i*.012,.09,'bandpass',1500,.6)},
+ t=>noise(t,.07,'highpass',7000,.45),
+ t=>noise(t,.6,'bandpass',300,.6,3000),
+ t=>osc('sine',320,150,t,.22,.9),
+ t=>{osc('square',660,990,t,.08,.25);osc('square',990,0,t+.08,.12,.25)},
+ t=>{noise(t,.9,'highpass',2500,.5);osc('sawtooth',900,60,t,.5,.15)},
+ t=>{note(880,t,'sine',1,.4);note(1760,t,'sine',.8,.2);note(2640,t,'sine',.5,.1)},
+ t=>{note(523.25,t,'triangle',.7,.5);note(659.25,t,'triangle',.7,.3)},
+ t=>osc('sawtooth',196,0,t,.6,.35,1200),
+ t=>osc('sawtooth',330,0,t,.5,.3,1800),
+ t=>[523.25,659.25,783.99,1046.5].forEach((f,i)=>note(f,t+i*.07,'square',.18,.2)),
+ t=>note(587.33,t,'sine',.5,.6),
+ t=>[1568,2093,2637,3136].forEach((f,i)=>note(f,t+i*.04,'sine',.25,.18)),
+ t=>osc('sawtooth',1400,90,t,.28,.3)
+];
+function sound(i,t){if(!ac)return;SND[i](t||ac.currentTime)}
+
+// state
+let mode='free',recStart=0,events=[],loopStart=0,loopTimer=null,raf=null,playing=false;
+const $=id=>document.getElementById(id),modeEl=$('mode'),bar=$('bar').firstElementChild;
+function setMode(m,txt){mode=m;modeEl.className='row '+(m==='rec'?'rec':m==='loop'?'loop':'');$('modeT').textContent=txt}
+function flash(i){pads[i].classList.add('hit');setTimeout(()=>pads[i].classList.remove('hit'),90)}
+function press(i){init();if(ac.state==='suspended')ac.resume();sound(i);flash(i);hits++;$('hits').textContent=hits+' hit';
+  if(mode==='rec')events.push({t:ac.currentTime-recStart,p:i})}
+function startRec(){init();if(ac.state==='suspended')ac.resume();stopLoop();events=[];recStart=ac.currentTime;setMode('rec','RECORDING...');tick();
+  setTimeout(()=>{if(mode==='rec'){if(events.length)startLoop();else{setMode('free','FREE MODE');bar.style.width=0}}},LOOP*1000)}
+function startLoop(){init();if(!events.length)return;stopLoop(true);playing=true;setMode('loop','LOOPING');loopStart=ac.currentTime+.05;sched(loopStart);tick()}
+function sched(start){
+  if(!playing)return;
+  events.forEach(e=>{const t=start+e.t;sound(e.p,t);setTimeout(()=>flash(e.p),Math.max(0,(t-ac.currentTime)*1000))});
+  loopTimer=setTimeout(()=>sched(start+LOOP),Math.max(0,(start+LOOP-ac.currentTime-.15)*1000));
+  loopStart=start;
+}
+function stopLoop(keep){playing=false;clearTimeout(loopTimer);if(!keep){setMode('free','FREE MODE');bar.style.width=0;dots.forEach(d=>d.classList.remove('on'))}}
+function tick(){cancelAnimationFrame(raf);const f=()=>{
+  if(mode==='rec'){const p=Math.min(1,(ac.currentTime-recStart)/LOOP);bar.style.width=p*100+'%'}
+  else if(mode==='loop'){let p=((ac.currentTime-loopStart)%LOOP)/LOOP;if(p<0)p=0;bar.style.width=p*100+'%';const a=Math.floor(p*16);dots.forEach((d,i)=>d.classList.toggle('on',i===a))}
+  if(mode!=='free')raf=requestAnimationFrame(f)};f()}
+$('rec').onclick=startRec;
+$('play').onclick=()=>{if(mode==='rec')return;if(events.length)startLoop()};
+$('stop').onclick=()=>{stopLoop();};
+$('clr').onclick=()=>{stopLoop();events=[];hits=0;$('hits').textContent='0 hit'};
+$('mute').onclick=()=>{init();muted=!muted;master.gain.value=muted?0:.8;$('mute').textContent=muted?'🔇':'🔊'};
+addEventListener('keydown',e=>{if(e.repeat)return;const i=KEYS.indexOf(e.key.toLowerCase());if(i>=0)press(i)});
+})();
+</script>
+</body>
+</html>

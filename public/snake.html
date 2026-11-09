@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>🐍 Snake Rush</title>
+<meta property="og:title" content="🐍 SNAKE RUSH"><meta property="og:description" content="Swipe or use the D-pad · eat, grow, speed up!">
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;touch-action:none}
+html,body{margin:0;height:100%;background:#04100a;color:#dfffe9;font-family:system-ui,sans-serif}
+body{display:flex;justify-content:center}
+#app{width:100%;max-width:440px;height:100%;padding:12px;display:flex;flex-direction:column;gap:10px}
+header{display:flex;justify-content:space-between;align-items:center}
+h1{margin:0;font-size:22px}.b{border:1px solid #1d5a38;border-radius:12px;padding:6px 14px;text-align:center;background:#07180f}
+.b small{display:block;font-size:9px;letter-spacing:2px;color:#6fb98e}.b b{font-size:20px;color:#ffd75e}
+#wrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative}
+canvas{max-width:100%;max-height:100%;aspect-ratio:1;border:2px solid #1d5a38;border-radius:18px;background:#020a06}
+#msg{position:absolute;text-align:center;background:rgba(2,10,6,.85);padding:18px 28px;border-radius:18px}
+#msg button{margin-top:10px;padding:10px 26px;font-size:16px;font-weight:700;border:0;border-radius:12px;background:#3ee07a;color:#02140a}
+.pad{display:grid;grid-template-columns:repeat(3,64px);grid-template-rows:repeat(2,56px);gap:8px;justify-content:center}
+.pad button{font-size:24px;color:#3ee07a;background:#07180f;border:2px solid #1d5a38;border-radius:16px}
+.pad button:active{background:#0f3a22}
+</style></head><body><div id="app">
+<header><h1>🐍 SNAKE RUSH</h1><div class="b"><small>SCORE · BEST</small><b id="sc">0 · 0</b></div></header>
+<div id="wrap"><canvas id="c" width="400" height="400"></canvas><div id="msg"><div style="font-size:22px;font-weight:800">🐍 Ready?</div><div>Swipe on the board or use arrows</div><button id="go">START</button></div></div>
+<div class="pad"><span></span><button data-d="U">▲</button><span></span><button data-d="L">◀</button><button data-d="D">▼</button><button data-d="R">▶</button></div>
+</div>
+<script>
+const N=20,cv=document.getElementById('c'),x=cv.getContext('2d'),C=cv.width/N;
+let best=0;try{best=+localStorage.getItem('snakeBest')||0}catch(e){}
+let sn,dir,nd,food,score,run=false,timer,speed;
+const V={U:[0,-1],D:[0,1],L:[-1,0],R:[1,0]};
+function put(){do{food=[Math.floor(Math.random()*N),Math.floor(Math.random()*N)]}while(sn.some(s=>s[0]==food[0]&&s[1]==food[1]))}
+function start(){sn=[[10,10],[9,10],[8,10]];dir=nd='R';score=0;speed=150;put();run=true;document.getElementById('msg').style.display='none';ui();clearTimeout(timer);step()}
+function ui(){document.getElementById('sc').textContent=score+' · '+best}
+function step(){
+  if(!run)return;dir=nd;const h=[sn[0][0]+V[dir][0],sn[0][1]+V[dir][1]];
+  if(h[0]<0||h[1]<0||h[0]>=N||h[1]>=N||sn.some(s=>s[0]==h[0]&&s[1]==h[1]))return over();
+  sn.unshift(h);
+  if(h[0]==food[0]&&h[1]==food[1]){score+=10;speed=Math.max(60,speed-4);put();ui()}else sn.pop();
+  draw();timer=setTimeout(step,speed)}
+function over(){run=false;if(score>best){best=score;try{localStorage.setItem('snakeBest',best)}catch(e){}}ui();
+  const m=document.getElementById('msg');m.innerHTML='<div style="font-size:22px;font-weight:800">💥 Game Over</div><div>Score '+score+'</div><button id="go">PLAY AGAIN</button>';m.style.display='block';document.getElementById('go').onclick=start}
+function draw(){x.fillStyle='#020a06';x.fillRect(0,0,400,400);
+  x.font=(C-2)+'px serif';x.textAlign='center';x.textBaseline='middle';x.fillText('🍎',food[0]*C+C/2,food[1]*C+C/2+1);
+  sn.forEach((s,i)=>{x.fillStyle=i?'hsl(140,70%,'+(48-Math.min(i,20))+'%)':'#7dffa8';x.beginPath();x.roundRect(s[0]*C+1,s[1]*C+1,C-2,C-2,6);x.fill()})}
+function turn(d){const o={U:'D',D:'U',L:'R',R:'L'};if(o[d]!==dir)nd=d;if(!run&&document.getElementById('msg').style.display!=='none')start()}
+document.getElementById('go').onclick=start;
+document.querySelectorAll('[data-d]').forEach(b=>b.addEventListener('pointerdown',e=>{e.preventDefault();turn(b.dataset.d)}));
+addEventListener('keydown',e=>{const m={ArrowUp:'U',ArrowDown:'D',ArrowLeft:'L',ArrowRight:'R',w:'U',s:'D',a:'L',d:'R'}[e.key];if(m)turn(m)});
+let sx,sy;cv.addEventListener('pointerdown',e=>{sx=e.clientX;sy=e.clientY});
+cv.addEventListener('pointerup',e=>{const dx=e.clientX-sx,dy=e.clientY-sy;if(Math.max(Math.abs(dx),Math.abs(dy))<20)return;turn(Math.abs(dx)>Math.abs(dy)?(dx>0?'R':'L'):(dy>0?'D':'U'))});
+sn=[[10,10],[9,10],[8,10]];food=[15,10];ui();draw();
+</script></body></html>

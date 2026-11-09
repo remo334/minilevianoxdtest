@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>🔢 2048</title>
+<meta property="og:title" content="🔢 2048"><meta property="og:description" content="Swipe to merge tiles · reach 2048!">
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;touch-action:none}
+html,body{margin:0;height:100%;background:#14101f;color:#f2ecff;font-family:system-ui,sans-serif}
+body{display:flex;justify-content:center}
+#app{width:100%;max-width:440px;padding:16px;display:flex;flex-direction:column;gap:14px}
+header{display:flex;justify-content:space-between;align-items:center}
+h1{margin:0;font-size:30px;color:#ffcf3e}.b{border:1px solid #3a2f5c;border-radius:12px;padding:6px 14px;text-align:center;background:#1c1630}
+.b small{display:block;font-size:9px;letter-spacing:2px;color:#9a8cc8}.b b{font-size:20px}
+#board{position:relative;width:100%;aspect-ratio:1;background:#2a2142;border-radius:18px;padding:10px;display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.t{border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:clamp(20px,8vw,36px);background:#382d58}
+#msg{display:none;position:absolute;inset:0;border-radius:18px;background:rgba(20,16,31,.85);flex-direction:column;align-items:center;justify-content:center;gap:10px;font-size:24px;font-weight:800}
+button{padding:11px 26px;font-size:16px;font-weight:700;border:0;border-radius:12px;background:#ffcf3e;color:#1a1200}
+.hint{text-align:center;font-size:12px;color:#9a8cc8}
+</style></head><body><div id="app">
+<header><h1>2048</h1><div style="display:flex;gap:8px"><div class="b"><small>SCORE</small><b id="s">0</b></div><div class="b"><small>BEST</small><b id="b">0</b></div></div></header>
+<div id="board"></div><button onclick="init()">NEW GAME</button>
+<div class="hint">Swipe or use arrow keys · merge equal tiles</div></div>
+<script>
+const bd=document.getElementById('board');let g,score,best=0,over=false;try{best=+localStorage.getItem('b2048')||0}catch(e){}
+const COL={0:['#382d58','#fff'],2:['#eee4da','#776e65'],4:['#ede0c8','#776e65'],8:['#f2b179','#fff'],16:['#f59563','#fff'],32:['#f67c5f','#fff'],64:['#f65e3b','#fff'],128:['#edcf72','#fff'],256:['#edcc61','#fff'],512:['#edc850','#fff'],1024:['#edc53f','#fff'],2048:['#edc22e','#fff']};
+function init(){g=Array.from({length:4},()=>[0,0,0,0]);score=0;over=false;add();add();draw()}
+function add(){const e=[];g.forEach((r,i)=>r.forEach((v,j)=>{if(!v)e.push([i,j])}));if(!e.length)return;const[i,j]=e[Math.floor(Math.random()*e.length)];g[i][j]=Math.random()<.9?2:4}
+function line(a){let r=a.filter(v=>v);for(let i=0;i<r.length-1;i++)if(r[i]==r[i+1]){r[i]*=2;score+=r[i];r.splice(i+1,1)}while(r.length<4)r.push(0);return r}
+function move(d){if(over)return;const o=JSON.stringify(g);
+  for(let k=0;k<4;k++){let a=d=='L'||d=='R'?g[k].slice():g.map(r=>r[k]);if(d=='R'||d=='D')a.reverse();a=line(a);if(d=='R'||d=='D')a.reverse();
+    if(d=='L'||d=='R')g[k]=a;else a.forEach((v,i)=>g[i][k]=v)}
+  if(JSON.stringify(g)!=o){add();if(score>best){best=score;try{localStorage.setItem('b2048',best)}catch(e){}}}
+  draw();check()}
+function check(){const can=g.some((r,i)=>r.some((v,j)=>!v||(g[i][j+1]==v)||(g[i+1]&&g[i+1][j]==v)));
+  const w=g.flat().includes(2048);if(!can||w){over=!can;const m=document.getElementById('msg');m.style.display='flex';m.innerHTML=(w?'🎉 2048!':'💥 Game Over')+'<button onclick="init()">PLAY AGAIN</button>'}}
+function draw(){bd.innerHTML='';g.flat().forEach(v=>{const t=document.createElement('div');t.className='t';const c=COL[v]||['#3c3a32','#fff'];t.style.background=c[0];t.style.color=c[1];t.textContent=v||'';bd.appendChild(t)});
+  const m=document.createElement('div');m.id='msg';bd.appendChild(m);document.getElementById('s').textContent=score;document.getElementById('b').textContent=best}
+addEventListener('keydown',e=>{const m={ArrowLeft:'L',ArrowRight:'R',ArrowUp:'U',ArrowDown:'D'}[e.key];if(m){e.preventDefault();move(m)}});
+let sx,sy;addEventListener('pointerdown',e=>{sx=e.clientX;sy=e.clientY});
+addEventListener('pointerup',e=>{const dx=e.clientX-sx,dy=e.clientY-sy;if(Math.max(Math.abs(dx),Math.abs(dy))<25)return;move(Math.abs(dx)>Math.abs(dy)?(dx>0?'R':'L'):(dy>0?'D':'U'))});
+init();
+</script></body></html>
