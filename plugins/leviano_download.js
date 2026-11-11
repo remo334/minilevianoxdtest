@@ -8,9 +8,6 @@ const { cmd } = require('../command')
 
 const { ytdlpDownload } = require('../lib/ytdlp')
 
-let ytdl = null
-try { ytdl = require('@distube/ytdl-core') } catch (e) { }
-
 const MAX_MB = config.DL_MAX_MB || 80
 const MAX_BYTES = MAX_MB * 1024 * 1024
 const MAX_MINUTES = config.DL_MAX_MINUTES || 20
@@ -127,21 +124,6 @@ async function resolveVideo(q) {
     return video
 }
 
-async function ytBuffer(url, kind) {
-    const info = await ytdl.getInfo(url)
-    let format
-    if (kind === 'audio') {
-        const mp4 = info.formats.filter(f => f.hasAudio && !f.hasVideo && f.container === 'mp4')
-        format = mp4.sort((a, b) => b.audioBitrate - a.audioBitrate)[0] ||
-            ytdl.chooseFormat(info.formats, { quality: 'highestaudio', filter: 'audioonly' })
-    } else {
-        try { format = ytdl.chooseFormat(info.formats, { quality: '18' }) }
-        catch { format = ytdl.chooseFormat(info.formats, { filter: 'audioandvideo', quality: 'lowest' }) }
-    }
-    if (Number(format.contentLength) > MAX_BYTES) throw new Error('FILE_TOO_LARGE')
-    return toBuffer(ytdl.downloadFromInfo(info, { format }))
-}
-
 const card = (v) => `𝑳𝜺𝝂𝜾⃮⃯⃔𝜶𝜼𝝄♪🤍\n\n *${v.title}*\n\n࿇ ${v.author?.name || 'Unknown'}\n࿇ ${v.timestamp}\n࿇ ${Number(v.views || 0).toLocaleString()}\n࿇ ${v.url}`
 
 const SEARCH_API = 'https://xenoytserch.vercel.app/api/ytsearch?q='
@@ -172,13 +154,13 @@ async function searchSong(q) {
     return first
 }
 
-const MP4_API = 'https://xenoytdl-2.vercel.app/api/youtube?format=mp4&url='
+const YTVIDEO2_API = 'https://xenosirapis.zone.id/api/ytvideo2?url='
 const AMEEN_YTD = 'https://ameen-api.vercel.app/v2/ytd?url='
 const SIR_MP3 = 'https://xenosirapis.zone.id/api/ytmp3dl?url='
 const SIR_MP4 = 'https://xenosirapis.zone.id/api/ytmp4dl?url='
 
-async function downloadViaApi(api, videoUrl, expect) {
-    const { data } = await axios.get(api + encodeURIComponent(videoUrl), { timeout: 90000 })
+async function downloadViaApi(api, videoUrl, expect, suffix = '') {
+    const { data } = await axios.get(api + encodeURIComponent(videoUrl) + suffix, { timeout: 90000 })
     if (data?.status === false || data?.success === false) throw new Error('API_FAIL')
     const link = findDownloadUrl(data)
     if (!link) throw new Error('API_FAIL')
@@ -222,15 +204,7 @@ const downloadMp3 = (videoUrl) => firstThatWorks('YT-AUDIO', [
     function songApi() { return downloadViaSongApi(videoUrl) },
     function ameenApi() { return downloadViaApi(AMEEN_YTD, videoUrl) },
     function sirApi() { return downloadViaApi(SIR_MP3, videoUrl) },
-    function xenoApi() { return downloadViaApi(MP3_API, videoUrl) },
-    async function ytdlp() { return (await ytdlpDownload(videoUrl, { kind: 'audio', maxBytes: MAX_BYTES })).buffer }
-])
-
-const downloadVideo = (videoUrl) => firstThatWorks('YT-VIDEO', [
-    function sirApi() { return downloadViaApi(SIR_MP4, videoUrl, 'video') },
-    function xenoApi() { return downloadViaApi(MP4_API, videoUrl, 'video') },
-    async function ytdlp() { return (await ytdlpDownload(videoUrl, { kind: 'video', maxBytes: MAX_BYTES })).buffer },
-    function ytdlCore() { if (!ytdl) throw new Error('NO_YTDL'); return ytBuffer(videoUrl, 'video') }
+    function xenoApi() { return downloadViaApi(MP3_API, videoUrl) }
 ])
 
 cmd({
@@ -256,25 +230,6 @@ async (conn, mek, m, { from, q, prefix, sender, reply }) => {
 
         const audio = await downloadMp3(v.url)
         await conn.sendMessage(from, { audio, mimetype: 'audio/mpeg', fileName: `${v.title}.mp3` }, { quoted: mek })
-    } catch (e) { console.log(e); reply(friendly(e)) }
-})
-
-cmd({
-    pattern: "video",
-    alias: ["ytmp4"],
-    desc: "Download a YouTube video (360p). Usage: /video <name or link>",
-    category: "download",
-    react: "🎬",
-    filename: __filename
-},
-async (conn, mek, m, { from, q, prefix, sender, reply }) => {
-    try {
-        if (!q) return reply(`Usage: ${prefix}video <name or YouTube link>`)
-        if (!(await waitTurn(sender, conn, from, mek))) return
-        await waitReact(conn, from, mek)
-        const v = await resolveVideo(q)
-        const video = await downloadVideo(v.url)
-        await conn.sendMessage(from, { video, mimetype: 'video/mp4', caption: `*${v.title}*` }, { quoted: mek })
     } catch (e) { console.log(e); reply(friendly(e)) }
 })
 
@@ -520,139 +475,3 @@ function extractYouTubeId(input) {
 }
 
 const isHttp = (u) => typeof u === 'string' && /^https?:\/\//i.test(u);
-
-cmd({
-    pattern: "ytv",
-    alias: ["yt", "ytvideo", "ytdl", "yta", "audio"],
-    desc: "Download YouTube videos and audio. Use /yta for audio.",
-    category: "downloader",
-    react: "⏳",
-    filename: __filename
-},
-async (conn, mek, m, { from, q, prefix, command }) => {
-    const react = (emoji) => conn.sendMessage(from, { react: { text: emoji, key: mek.key } }).catch(() => {});
-    const say = (text) => conn.sendMessage(from, { text }, { quoted: mek });
-
-    try {
-        if (!q) {
-            return await say(`_Please provide a YouTube URL or song name_\nExample: ${prefix}yt https://youtu.be/xxxxx\nExample: ${prefix}yta Faded`);
-        }
-
-        const isAudio = ["yta", "audio"].includes(String(command || '').toLowerCase());
-        const input   = q.trim();
-
-        let videoUrl = null;
-        let title    = isAudio ? "YouTube Audio" : "YouTube Video";
-
-        const ytId = extractYouTubeId(input);
-        if (ytId) videoUrl = `https://www.youtube.com/watch?v=${ytId}`;
-
-        if (!videoUrl) {
-            await react("🔍");
-            try {
-                const { data } = await axios.get(
-                    `https://xenosirapis.zone.id/api/ytsearch?query=${encodeURIComponent(input)}`,
-                    { headers: YT_UA, timeout: 20000 }
-                );
-                const first = data?.results?.[0];
-                if (first) {
-                    const id = first.videoId || extractYouTubeId(first.url || '');
-                    if (id) videoUrl = `https://www.youtube.com/watch?v=${id}`;
-                    if (first.title) title = first.title;
-                }
-            } catch (err) {
-                console.warn("[yt.js] xenosirapis ytsearch error:", err.message);
-            }
-            if (!videoUrl) {
-                try {
-                    const first = (await yts(input)).videos?.[0];
-                    if (first) { videoUrl = first.url; title = first.title || title; }
-                } catch (err) {
-                    console.warn("[yt.js] yt-search error:", err.message);
-                }
-            }
-        }
-
-        if (!videoUrl) {
-            await react("❌");
-            return await say("ERROR");
-        }
-
-        await react("⏳");
-
-        let downloadUrl = null;
-        const sources = [
-            async () => {
-                if (isAudio) return null;
-                const { data } = await axios.get(
-                    `https://yt-quality-api.vercel.app/api/ytmp4?url=${encodeURIComponent(videoUrl)}`,
-                    { headers: YT_UA, timeout: 60000 }
-                );
-                if (data?.status === false || data?.success === false) return null;
-                const t = data?.title || data?.result?.title || data?.data?.title;
-                return { url: findDownloadUrl(data), title: t };
-            },
-            async () => {
-                const { data } = await axios.get(
-                    `https://xenosirapis.zone.id/api/${isAudio ? "ytmp3dl" : "ytmp4dl"}?url=${encodeURIComponent(videoUrl)}`,
-                    { headers: YT_UA, timeout: 35000 }
-                );
-                return (data?.success && data?.downloadUrl) ? { url: data.downloadUrl, title: data.title } : null;
-            },
-            async () => {
-                const { data } = await axios.get(
-                    `https://jerrycoder.oggyapi.workers.dev/down/${isAudio ? "ytmp3-v1" : "ytmp4-v1"}?url=${encodeURIComponent(videoUrl)}`,
-                    { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 30000 }
-                );
-                const url = data?.url || data?.result?.download || data?.data?.download || data?.result?.url || data?.download;
-                return { url, title: data?.title || data?.result?.title };
-            },
-            async () => {
-                const { data } = await axios.get(
-                    `https://xenoytdl-2.vercel.app/api/youtube?url=${encodeURIComponent(videoUrl)}&format=${isAudio ? "mp3" : "mp4"}`,
-                    { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 30000 }
-                );
-                return { url: data?.download, title: data?.title };
-            }
-        ];
-        for (const [i, source] of sources.entries()) {
-            try {
-                const r = await source();
-                if (isHttp(r?.url)) {
-                    downloadUrl = r.url;
-                    if (typeof r.title === 'string' && r.title.trim()) title = r.title.trim();
-                    break;
-                }
-            } catch (err) {
-                console.warn(`[yt.js] download server ${i + 1} error:`, err.message);
-            }
-        }
-
-        if (!downloadUrl) {
-            await react("❌");
-            return await say("_ERROR_");
-        }
-
-        if (isAudio) {
-            await conn.sendMessage(from, {
-                audio: { url: downloadUrl },
-                mimetype: "audio/mpeg",
-                fileName: `${title}.mp3`,
-                ptt: false
-            }, { quoted: mek });
-        } else {
-            await conn.sendMessage(from, {
-                video: { url: downloadUrl },
-                caption: `*${title}*`,
-                mimetype: "video/mp4"
-            }, { quoted: mek });
-        }
-
-        await react("✅");
-
-    } catch (e) {
-        console.error("[yt.js] Error:", e.message || e);
-        await react("❌");
-        await say("ERROR").catch(() => {});
-    }
-});
