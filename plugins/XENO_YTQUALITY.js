@@ -1,15 +1,21 @@
 //Xeno Exe
+// YouTube video downloader with quality menu (reply 1 = 360p, 2 = 720p, 3 = 1080p)
+// Uses ONLY these two APIs (no yt-dlp, no ytdl-core, no other servers):
+//   1) https://xenosirapis.zone.id/api/ytvideo2?url=...&quality=...
+//   2) https://xenosirapis.zone.id/api/ytmp4dl?url=...&quality=...
 const axios = require('axios')
 const yts = require('yt-search')
 const config = require('../config')
 const { cmd } = require('../command')
 
-const QUALITY_API = 'https://yt-quality-api.vercel.app/api/ytmp4?url='
-const MAX_MB = config.DL_MAX_MB || 80
-const MAX_BYTES = MAX_MB * 1024 * 1024
+const YTVIDEO2_API = 'https://xenosirapis.zone.id/api/ytvideo2?url='
+const YTMP4DL_API = 'https://xenosirapis.zone.id/api/ytmp4dl?url='
+const QUALITIES = ['360', '720', '1080']          // reply 1, 2, 3
+const DOC_LIMIT = 100 * 1024 * 1024               // above 100 MB -> send as document
 const MAX_MINUTES = config.DL_MAX_MINUTES || 20
 const LIST_TTL_MS = 10 * 60 * 1000
 const REQUEST_COOLDOWN_MS = 5000
+const UA = { 'User-Agent': 'Mozilla/5.0' }
 
 const pending = new Map()
 const lastRequest = new Map()
@@ -22,63 +28,78 @@ setInterval(() => {
 const YT_ID_RE = /(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:[^\s&]*&)*v=|shorts\/|live\/|embed\/|v\/))([A-Za-z0-9_-]{11})/i
 
 const react = (conn, from, mek, text) => conn.sendMessage(from, { react: { text, key: mek.key } }).catch(() => {})
-
-function sizeOf(url) {
-    try {
-        const n = Number(new URL(url).searchParams.get('clen'))
-        return n > 0 ? n : 0
-    } catch (e) { return 0 }
-}
-
 const fmtMB = (bytes) => (bytes / 1024 / 1024).toFixed(1) + ' MB'
-const fmtTime = (s) => {
-    s = Math.round(Number(s) || 0)
-    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60
-    return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(sec).padStart(2, '0')
-}
 
-const height = (q) => Number(String(q).replace(/\D/g, '')) || 0
-
-function cleanDownloads(list) {
-    const seen = new Set()
-    return (Array.isArray(list) ? list : [])
-        .filter(d => d && /^https?:\/\//i.test(d.url || ''))
-        .map(d => ({ quality: String(d.quality || 'Video').trim(), url: d.url }))
-        .filter(d => !seen.has(d.quality) && seen.add(d.quality))
-        .sort((a, b) => height(b.quality) - height(a.quality))
-}
-
-async function resolveUrl(input) {
+// 1) search / resolve the video link first
+async function resolveVideo(input) {
     const id = (input.match(YT_ID_RE) || [])[1]
-    if (id) return { url: `https://youtu.be/${id}`, thumb: '' }
-    const video = (await yts(input)).videos?.[0]
+    const video = id ? await yts({ videoId: id }) : (await yts(input)).videos?.[0]
     if (!video) throw new Error('NO_RESULT')
     if (video.seconds > MAX_MINUTES * 60) throw new Error('TOO_LONG')
-    return { url: video.url, thumb: video.thumbnail || '' }
+    return {
+        url: `https://youtu.be/${video.videoId || id}`,
+        title: video.title || 'YouTube Video',
+        author: video.author?.name || '',
+        duration: video.timestamp || '',
+        thumbnail: video.thumbnail || video.image || ''
+    }
 }
 
-async function fetchQualities(videoUrl) {
-    const { data } = await axios.get(QUALITY_API + encodeURIComponent(videoUrl), {
-        timeout: 45000, headers: { 'User-Agent': 'Mozilla/5.0' }
-    })
-    if (!data || data.status === false || !data.result) throw new Error('API_FAIL')
-    const downloads = cleanDownloads(data.result.downloads)
-    if (!downloads.length) throw new Error('API_FAIL')
-    if (Number(data.result.duration) > MAX_MINUTES * 60) throw new Error('TOO_LONG')
-    return {
-        title: data.result.title || 'YouTube Video',
-        author: data.result.author || '',
-        duration: data.result.duration,
-        thumbnail: data.result.thumbnail,
-        downloads
+// find a direct media link inside any API response shape
+function findLink(obj) {
+    const preferred = ['downloadUrl', 'download_url', 'download', 'dl', 'link', 'url', 'src']
+    const seen = new Set()
+    const walk = (o, depth = 0) => {
+        if (o == null || depth > 5) return null
+        if (typeof o === 'string') return (/^https?:\/\//i.test(o) && !/(youtu\.be|youtube\.com)\//i.test(o)) ? o : null
+        if (typeof o !== 'object' || seen.has(o)) return null
+        seen.add(o)
+        for (const k of preferred) if (k in o) { const r = walk(o[k], depth + 1); if (r) return r }
+        for (const k of Object.keys(o)) { const r = walk(o[k], depth + 1); if (r) return r }
+        return null
     }
+    return walk(obj)
+}
+
+// 2) ask the two APIs (ytvideo2 first, ytmp4dl as fallback)
+async function getDownloadLink(videoUrl, quality) {
+    let last
+    for (const api of [YTVIDEO2_API, YTMP4DL_API]) {
+        try {
+            const { data } = await axios.get(`${api}${encodeURIComponent(videoUrl)}&quality=${quality}`, { timeout: 120000, headers: UA })
+            if (data?.status === false || data?.success === false) throw new Error('API_FAIL')
+            const link = findLink(data)
+            if (!link) throw new Error('API_FAIL')
+            return link
+        } catch (e) {
+            console.log('[YT-QUALITY]', api.split('/').pop(), 'failed:', e?.message || e)
+            last = e
+        }
+    }
+    throw last || new Error('API_FAIL')
+}
+
+// size of the remote file without downloading it
+async function remoteSize(link) {
+    try {
+        const r = await axios.head(link, { timeout: 20000, headers: UA, maxRedirects: 5 })
+        const n = Number(r.headers['content-length'])
+        if (n > 0) return n
+    } catch (e) { }
+    try {
+        const r = await axios.get(link, { responseType: 'stream', timeout: 20000, headers: UA, maxRedirects: 5 })
+        const n = Number(r.headers['content-length'])
+        r.data.destroy()
+        if (n > 0) return n
+    } catch (e) { }
+    return 0
 }
 
 function friendly(e) {
     const m = String(e?.message || e)
     if (m === 'NO_RESULT') return 'No YouTube results found. Try another name or paste a link.'
     if (m === 'TOO_LONG') return `Video is longer than ${MAX_MINUTES} minutes.`
-    if (m === 'API_FAIL') return 'Could not get download qualities for that video. Try again in a moment.'
+    if (m === 'API_FAIL') return 'Could not download that video right now. Try another quality or try again later.'
     return 'Something went wrong. Please try again.'
 }
 
@@ -100,29 +121,22 @@ async (conn, mek, m, { from, q, prefix, sender, reply }) => {
         lastRequest.set(sender, Date.now())
 
         await react(conn, from, mek, '⏳')
-        const { url, thumb } = await resolveUrl(input)
-        const info = await fetchQualities(url)
+        const v = await resolveVideo(input)
 
-        const lines = info.downloads.map((d, i) => {
-            const size = sizeOf(d.url)
-            return `*${i + 1}.* ${d.quality}${size ? `  (${fmtMB(size)})` : ''}`
-        })
         const caption =
-            `*${info.title}*\n\n` +
-            (info.author ? `࿇ ${info.author}\n` : '') +
-            (info.duration ? `࿇ ${fmtTime(info.duration)}\n` : '') +
-            `\n*Select a quality*\n${lines.join('\n')}\n\n` +
-            `_Reply to this message with a number (1-${info.downloads.length})_`
+            `*${v.title}*\n\n` +
+            (v.author ? `࿇ ${v.author}\n` : '') +
+            (v.duration ? `࿇ ${v.duration}\n` : '') +
+            `࿇ ${v.url}\n\n` +
+            `*Select a quality*\n` +
+            QUALITIES.map((qt, i) => `*${i + 1}.* ${qt}p`).join('\n') +
+            `\n\n_Reply to this message with 1, 2 or 3_\n_Videos over 100 MB are sent as a document (mp4)_`
 
-        const image = /^https?:\/\//i.test(info.thumbnail || '') ? info.thumbnail : thumb
-        const sent = image
-            ? await conn.sendMessage(from, { image: { url: image }, caption }, { quoted: mek })
+        const sent = /^https?:\/\//i.test(v.thumbnail)
+            ? await conn.sendMessage(from, { image: { url: v.thumbnail }, caption }, { quoted: mek })
             : await conn.sendMessage(from, { text: caption }, { quoted: mek })
 
-        pending.set(sent.key.id, {
-            from, title: info.title, downloads: info.downloads,
-            expires: Date.now() + LIST_TTL_MS, busy: false
-        })
+        pending.set(sent.key.id, { from, video: v, expires: Date.now() + LIST_TTL_MS, busy: false })
     } catch (e) {
         console.log('[YT-QUALITY]', e?.message || e)
         await react(conn, from, mek, '❌')
@@ -130,35 +144,36 @@ async (conn, mek, m, { from, q, prefix, sender, reply }) => {
     }
 })
 
-
+// reply "1" / "2" / "3" to the quality list
 cmd({ on: 'body', dontAddCommandList: true, filename: __filename },
 async (conn, mek, m, { from, body, isCmd, reply }) => {
     try {
         if (isCmd) return
-        const choice = /^\s*(\d{1,2})\s*$/.exec(body || '')
+        const choice = /^\s*([1-3])\s*$/.exec(body || '')
         if (!choice) return
 
         const stanzaId = mek.message?.extendedTextMessage?.contextInfo?.stanzaId
         const entry = stanzaId && pending.get(stanzaId)
         if (!entry || entry.from !== from) return
         if (entry.expires < Date.now()) { pending.delete(stanzaId); return reply('⌛ That list expired. Send the yt command again.') }
-
-        const n = Number(choice[1])
-        const pick = entry.downloads[n - 1]
-        if (!pick) return reply(`Reply with a number from 1 to ${entry.downloads.length}.`)
         if (entry.busy) return reply('⏳ Still downloading, please wait.')
 
-        const size = sizeOf(pick.url)
-        if (size > MAX_BYTES) return reply(`❌ ${pick.quality} is ${fmtMB(size)}, larger than the ${MAX_MB} MB limit. Pick a lower quality.`)
+        const quality = QUALITIES[Number(choice[1]) - 1]
+        const v = entry.video
 
         entry.busy = true
         try {
             await react(conn, from, mek, '⏳')
-            await conn.sendMessage(from, {
-                video: { url: pick.url },
-                mimetype: 'video/mp4',
-                caption: `*${entry.title}*\n࿇ ${pick.quality}`
-            }, { quoted: mek })
+            const link = await getDownloadLink(v.url, quality)
+            const size = await remoteSize(link)
+            const caption = `*${v.title}*\n࿇ ${quality}p${size ? ` • ${fmtMB(size)}` : ''}`
+
+            if (size > DOC_LIMIT) {
+                const fileName = `${v.title.replace(/[\\/:*?"<>|]/g, '').trim() || 'video'} (${quality}p).mp4`
+                await conn.sendMessage(from, { document: { url: link }, mimetype: 'video/mp4', fileName, caption }, { quoted: mek })
+            } else {
+                await conn.sendMessage(from, { video: { url: link }, mimetype: 'video/mp4', caption }, { quoted: mek })
+            }
             await react(conn, from, mek, '✅')
         } finally {
             entry.busy = false
@@ -166,8 +181,8 @@ async (conn, mek, m, { from, body, isCmd, reply }) => {
     } catch (e) {
         console.log('[YT-QUALITY] download failed:', e?.message || e)
         await react(conn, from, mek, '❌')
-        reply('_ERROR_')
+        reply(friendly(e))
     }
 })
 
-module.exports = { cleanDownloads, sizeOf, pending }
+module.exports = { pending }
