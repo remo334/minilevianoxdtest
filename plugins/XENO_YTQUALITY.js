@@ -5,14 +5,12 @@
 //   2) https://xenosirapis.zone.id/api/ytmp4dl?url=...&quality=...
 const axios = require('axios')
 const yts = require('yt-search')
-const config = require('../config')
 const { cmd } = require('../command')
 
 const YTVIDEO2_API = 'https://xenosirapis.zone.id/api/ytvideo2?url='
 const YTMP4DL_API = 'https://xenosirapis.zone.id/api/ytmp4dl?url='
-const QUALITIES = ['360', '720', '1080']          // reply 1, 2, 3
+const QUALITIES = ['1080', '720', '360']          // reply 1 = 1080p, 2 = 720p, 3 = 360p
 const DOC_LIMIT = 100 * 1024 * 1024               // above 100 MB -> send as document
-const MAX_MINUTES = config.DL_MAX_MINUTES || 20
 const LIST_TTL_MS = 10 * 60 * 1000
 const REQUEST_COOLDOWN_MS = 5000
 const UA = { 'User-Agent': 'Mozilla/5.0' }
@@ -35,7 +33,6 @@ async function resolveVideo(input) {
     const id = (input.match(YT_ID_RE) || [])[1]
     const video = id ? await yts({ videoId: id }) : (await yts(input)).videos?.[0]
     if (!video) throw new Error('NO_RESULT')
-    if (video.seconds > MAX_MINUTES * 60) throw new Error('TOO_LONG')
     return {
         url: `https://youtu.be/${video.videoId || id}`,
         title: video.title || 'YouTube Video',
@@ -66,7 +63,7 @@ async function getDownloadLink(videoUrl, quality) {
     let last
     for (const api of [YTVIDEO2_API, YTMP4DL_API]) {
         try {
-            const { data } = await axios.get(`${api}${encodeURIComponent(videoUrl)}&quality=${quality}`, { timeout: 120000, headers: UA })
+            const { data } = await axios.get(`${api}${encodeURIComponent(videoUrl)}&quality=${quality}`, { timeout: 600000, headers: UA })
             if (data?.status === false || data?.success === false) throw new Error('API_FAIL')
             const link = findLink(data)
             if (!link) throw new Error('API_FAIL')
@@ -98,15 +95,14 @@ async function remoteSize(link) {
 function friendly(e) {
     const m = String(e?.message || e)
     if (m === 'NO_RESULT') return 'No YouTube results found. Try another name or paste a link.'
-    if (m === 'TOO_LONG') return `Video is longer than ${MAX_MINUTES} minutes.`
     if (m === 'API_FAIL') return 'Could not download that video right now. Try another quality or try again later.'
     return 'Something went wrong. Please try again.'
 }
 
 cmd({
-    pattern: "yt",
-    alias: ["ytq", "ytquality"],
-    desc: "Download a YouTube video in the quality you choose. Usage: /yt <link or name>",
+    pattern: "ytv",
+    alias: ["yt", "ytq", "ytquality", "video", "ytmp4", "ytvideo", "ytdl"],
+    desc: "Download a YouTube video in the quality you choose. Usage: /ytv <link or name>",
     category: "download",
     react: "🎬",
     filename: __filename
@@ -114,10 +110,10 @@ cmd({
 async (conn, mek, m, { from, q, prefix, sender, reply }) => {
     try {
         const input = (q || '').trim()
-        if (!input) return reply(`Usage: ${prefix}yt <YouTube link or video name>\nExample: ${prefix}yt https://youtu.be/myvmueZ3NcI`)
+        if (!input) return reply(`Usage: ${prefix}ytv <YouTube link or video name>\nExample: ${prefix}ytv https://youtu.be/myvmueZ3NcI`)
 
         const wait = lastRequest.get(sender) + REQUEST_COOLDOWN_MS - Date.now()
-        if (wait > 0) return reply(`⏳ Please wait ${Math.ceil(wait / 1000)}s before using ${prefix}yt again.`)
+        if (wait > 0) return reply(`⏳ Please wait ${Math.ceil(wait / 1000)}s before using ${prefix}ytv again.`)
         lastRequest.set(sender, Date.now())
 
         await react(conn, from, mek, '⏳')
@@ -130,7 +126,7 @@ async (conn, mek, m, { from, q, prefix, sender, reply }) => {
             `࿇ ${v.url}\n\n` +
             `*Select a quality*\n` +
             QUALITIES.map((qt, i) => `*${i + 1}.* ${qt}p`).join('\n') +
-            `\n\n_Reply to this message with 1, 2 or 3_\n_Videos over 100 MB are sent as a document (mp4)_`
+            `\n\n_Reply to this message with 1, 2 or 3_\n_Please wait, big videos take more time to download_\n_Videos over 100 MB are sent as a document (mp4)_`
 
         const sent = /^https?:\/\//i.test(v.thumbnail)
             ? await conn.sendMessage(from, { image: { url: v.thumbnail }, caption }, { quoted: mek })
@@ -155,7 +151,7 @@ async (conn, mek, m, { from, body, isCmd, reply }) => {
         const stanzaId = mek.message?.extendedTextMessage?.contextInfo?.stanzaId
         const entry = stanzaId && pending.get(stanzaId)
         if (!entry || entry.from !== from) return
-        if (entry.expires < Date.now()) { pending.delete(stanzaId); return reply('⌛ That list expired. Send the yt command again.') }
+        if (entry.expires < Date.now()) { pending.delete(stanzaId); return reply('⌛ That list expired. Send the ytv command again.') }
         if (entry.busy) return reply('⏳ Still downloading, please wait.')
 
         const quality = QUALITIES[Number(choice[1]) - 1]
