@@ -7,10 +7,11 @@ const config = require('../config')
 const { cmd } = require('../command')
 
 const { ytdlpDownload } = require('../lib/ytdlp')
+const { savetubeDownload } = require('../lib/savetube')
 
-const MAX_MB = config.DL_MAX_MB || 80
+const MAX_MB = config.DL_MAX_MB || 500
 const MAX_BYTES = MAX_MB * 1024 * 1024
-const MAX_MINUTES = config.DL_MAX_MINUTES || 20
+const MAX_MINUTES = config.DL_MAX_MINUTES || 100
 const COOLDOWN_MS = 8000
 const lastUse = new Map()
 
@@ -187,6 +188,16 @@ async function downloadViaSongApi(videoUrl) {
     return toBuffer(res.data)
 }
 
+async function downloadViaSavetube(videoUrl, expect) {
+    const result = await savetubeDownload(videoUrl, expect === 'audio' ? 'mp3' : '720')
+    if (!result?.url) throw new Error('API_FAIL')
+    const { res } = await fetchSafe(result.url)
+    const type = String(res.headers['content-type'] || '')
+    if (/text\/|html|json/i.test(type) || (expect === 'video' && /^audio\//i.test(type))) { res.data.destroy(); throw new Error('API_FAIL') }
+    if (Number(res.headers['content-length']) > MAX_BYTES) { res.data.destroy(); throw new Error('FILE_TOO_LARGE') }
+    return toBuffer(res.data)
+}
+
 async function firstThatWorks(label, steps) {
     let last
     for (const step of steps) {
@@ -204,7 +215,8 @@ const downloadMp3 = (videoUrl) => firstThatWorks('YT-AUDIO', [
     function songApi() { return downloadViaSongApi(videoUrl) },
     function ameenApi() { return downloadViaApi(AMEEN_YTD, videoUrl) },
     function sirApi() { return downloadViaApi(SIR_MP3, videoUrl) },
-    function xenoApi() { return downloadViaApi(MP3_API, videoUrl) }
+    function xenoApi() { return downloadViaApi(MP3_API, videoUrl) },
+    function savetubeApi() { return downloadViaSavetube(videoUrl, 'audio') }
 ])
 
 cmd({
