@@ -6,6 +6,7 @@
 const axios = require('axios')
 const yts = require('yt-search')
 const { cmd } = require('../command')
+const { savetubeDownload } = require('../lib/savetube')
 
 const YTVIDEO2_API = 'https://xenosirapis.zone.id/api/ytvideo2?url='
 const YTMP4DL_API = 'https://xenosirapis.zone.id/api/ytmp4dl?url='
@@ -58,7 +59,7 @@ function findLink(obj) {
     return walk(obj)
 }
 
-// 2) ask the two APIs (ytvideo2 first, ytmp4dl as fallback)
+// 2) ask the two main APIs (ytvideo2 first, ytmp4dl second), then fall back to savetube
 async function getDownloadLink(videoUrl, quality) {
     let last
     for (const api of [YTVIDEO2_API, YTMP4DL_API]) {
@@ -73,6 +74,17 @@ async function getDownloadLink(videoUrl, quality) {
             last = e
         }
     }
+
+    // fallback: savetube.vip (handles cases where both xenosirapis endpoints are down)
+    try {
+        const result = await savetubeDownload(videoUrl, quality)
+        if (!result?.url) throw new Error('API_FAIL')
+        return result.url
+    } catch (e) {
+        console.log('[YT-QUALITY] savetube failed:', e?.message || e)
+        last = e
+    }
+
     throw last || new Error('API_FAIL')
 }
 
