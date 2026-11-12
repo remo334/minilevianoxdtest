@@ -1,4 +1,4 @@
-//Xeno Exe
+//Leviano Xer
 
 const axios = require('axios')
 const fs = require('fs')
@@ -332,10 +332,8 @@ function parseInput(q) {
 
 function posterCaption(v, botName) {
     return `*${v.title || 'Song'}*\n\n` +
-        `࿇ ${v.channel || v.author?.name || 'Unknown'}\n` +
-        `࿇ ${v.duration || v.timestamp || '-'}\n` +
-        (v.views ? `࿇ ${v.views}\n` : '') +
-        `\n_${botName}_`
+        `⏱ ${v.duration || v.timestamp || '-'}\n\n` +
+        `『 ʟ ᴇ ᴠ ɪ ᴀ ɴ ᴏ 』`
 }
 
 function friendly(e) {
@@ -393,9 +391,7 @@ async (conn, mek, m, { from, q, quoted, prefix, isOwner, isSudo, getSettings, re
         const { ogg, waveform } = await toVoiceNote(raw, wave)
 
         if (video && DEFAULT_POSTER) {
-            const thumb = await getThumb(video.thumbnail)
-            if (thumb) await conn.sendMessage(channel.jid, { image: thumb, caption: posterCaption(video, botName) })
-            else await conn.sendMessage(channel.jid, { text: posterCaption(video, botName) })
+            await conn.sendMessage(channel.jid, { text: posterCaption(video, botName) })
         }
 
         if (DEFAULT_CONTACT) {
