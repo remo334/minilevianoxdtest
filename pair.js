@@ -575,18 +575,7 @@ async function Pair(number, res = null, serverId = null) {
                 if (isCmd) await sock.readMessages([mek.key]);
 
 
-                if (config.AUTO_REACT && !isMe && !isReact && Math.random() < 0.3) {
-                    const emojis = config.REACT_EMOJIS;
-
-                    sock.sendMessage(from, {
-                        react: {
-                            text: emojis[Math.floor(Math.random() * emojis.length)],
-                            key: mek.key
-                        }
-                    }).catch(() => {});
-                }
-
-                if (upsertType === 'notify') auto.onMessage(sock, mek, sessionId);   // autoseen / autotyping / autorecording
+                if (upsertType === 'notify') auto.onMessage(sock, mek, sessionId);   // autoseen / autoreact / autotyping / autorecording
 
                 const cmdName = isCmd ? body.slice(prefix.length).trim().split(' ')[0].toLowerCase() : false;
 
