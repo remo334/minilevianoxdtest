@@ -88,8 +88,30 @@ function setStatus(sessionId, status, extra = {}) {
 const fileCache = {};
 
 const saveDebounceTimers = {};
+const pairWatchTimers = {};
+
+// A number that was never linked (user did not enter the pairing code) is dropped after this long
+const PAIR_WAIT_MS = 3 * 60 * 1000;
+// A freshly paired socket that is still connecting is given this long before it counts as stale
+const CONNECTING_GRACE_MS = 30 * 1000;
+
+// Codes that mean WhatsApp itself removed this linked device: the saved session can never work again
+const TERMINAL_CODES = new Set([
+    DisconnectReason.loggedOut,            // 401 - device removed from Linked Devices
+    DisconnectReason.forbidden,            // 403
+    DisconnectReason.multideviceMismatch   // 411
+]);
+
+const isPaired = (sock) => {
+    const c = sock?.authState?.creds;
+    return !!(c && (c.registered || c.me));
+};
 
 function cleanupSession(sessionId) {
+    if (pairWatchTimers[sessionId]) {
+        clearTimeout(pairWatchTimers[sessionId]);
+        delete pairWatchTimers[sessionId];
+    }
     if (keepAliveTimers[sessionId]) {
         clearInterval(keepAliveTimers[sessionId]);
         delete keepAliveTimers[sessionId];
@@ -111,6 +133,31 @@ function cleanupSession(sessionId) {
         } catch (e) {}
         delete activeSockets[sessionId];
     }
+}
+
+// Fully forget a session: socket, timers, MongoDB document, local files, cache and server slot.
+// Afterwards the same number can be paired again from scratch.
+async function removeSession(sessionId, sessionPath, status = 'logged_out') {
+    cleanupSession(sessionId);
+    setStatus(sessionId, status, { connectedAt: null });
+
+    let removed = false;
+    for (let attempt = 1; attempt <= 3 && !removed; attempt++) {
+        try {
+            await sessionModel(sessionId).deleteMany({ sessionId });   // must run before servers.forget()
+            removed = true;
+        } catch (e) {
+            console.error(`Session delete failed (attempt ${attempt}/3):`, sessionId, e.message);
+            await new Promise(r => setTimeout(r, 1500));
+        }
+    }
+
+    for (const k of Object.keys(fileCache)) {
+        if (k.startsWith(sessionId + ':')) delete fileCache[k];
+    }
+    servers.forget(sessionId);
+    try { await fs.remove(sessionPath); } catch (e) {}
+    console.log(`🗑️ Session removed (${status}):`, sessionId, removed ? '' : '(MongoDB delete FAILED)');
 }
 
 async function restoreSession(sessionId, sessionPath) {
@@ -197,10 +244,22 @@ async function Pair(number, res = null, serverId = null) {
     if (serverId) servers.assign(sessionId, serverId);
     const sessionPath = path.join(SESSION_BASE_PATH, sessionId);
 
-    if (activeSockets[sessionId]) {
-        console.log('𝐒ocket already active for:', sessionId);
-        if (res && !res.headersSent) res.json({ error: 'Session already active. Please wait.' });
-        return;
+    const existing = activeSockets[sessionId];
+    if (existing) {
+        const info = sessionInfo[sessionId] || {};
+        const wsOpen = existing.ws?.readyState === 1;
+        if (info.status === 'online' && wsOpen && isPaired(existing)) {
+            console.log('Socket already online for:', sessionId);
+            if (res && !res.headersSent) res.json({ error: 'This number is already linked and the bot is online. To pair again, first remove the device from WhatsApp > Linked devices.' });
+            return;
+        }
+        if (isPaired(existing) && Date.now() - (info.since || 0) < CONNECTING_GRACE_MS) {
+            if (res && !res.headersSent) res.json({ error: 'Bot is connecting. Wait a few seconds and try again.' });
+            return;
+        }
+        // Dead / half-open / never-finished pairing socket: throw it away and start fresh
+        console.log('Replacing stale socket for:', sessionId);
+        cleanupSession(sessionId);
     }
 
     try {
@@ -278,10 +337,17 @@ async function Pair(number, res = null, serverId = null) {
             } catch (pairErr) {
                 console.error('Pairing code request failed:', pairErr);
                 if (res && !res.headersSent) { res.json({ error: 'Failed to generate pairing code. Try again.' }); responded = true; }
-                cleanupSession(sessionId);
-                servers.release(sessionId);
+                await removeSession(sessionId, sessionPath, 'error');
                 return;
             }
+
+            // Pairing code was not entered in time: free the number
+            pairWatchTimers[sessionId] = setTimeout(() => {
+                if (activeSockets[sessionId] === sock && !isPaired(sock)) {
+                    console.log('Pairing not completed, freeing number:', sessionId);
+                    removeSession(sessionId, sessionPath, 'offline');
+                }
+            }, PAIR_WAIT_MS);
         } else {
             console.log('Already registered:', sessionId);
             if (res && !res.headersSent) { res.json({ error: 'This number is already paired.' }); responded = true; }
@@ -342,22 +408,27 @@ async function Pair(number, res = null, serverId = null) {
                 const isLoggedOut = statusCode === DisconnectReason.loggedOut;
                 const isReplaced = statusCode === DisconnectReason.connectionReplaced;
                 console.log(`Disconnected: ${sessionId} | Code: ${statusCode}`);
+                const wasPaired = isPaired(sock);
                 cleanupSession(sessionId);
-                setStatus(sessionId, isReplaced ? 'replaced' : (isLoggedOut ? 'logged_out' : 'reconnecting'), { code: statusCode, connectedAt: null });
                 if (isReplaced) {
+                    setStatus(sessionId, 'replaced', { code: statusCode, connectedAt: null });
                     console.log('Connection replaced by another instance, not reconnecting:', sessionId);
-                } else if (!isLoggedOut) {
+                } else if (TERMINAL_CODES.has(statusCode) || isLoggedOut) {
+                    console.log('Device unlinked / logged out, removing session:', sessionId);
+                    await removeSession(sessionId, sessionPath, 'logged_out');
+                } else if (!wasPaired) {
+                    console.log('Never paired, removing session:', sessionId);
+                    await removeSession(sessionId, sessionPath, 'offline');
+                } else {
+                    setStatus(sessionId, 'reconnecting', { code: statusCode, connectedAt: null });
                     console.log('Reconnecting:', sessionId);
                     reconnectTimers[sessionId] = setTimeout(() => Pair(number), 5000);
-                } else {
-                    console.log('Logged out:', sessionId);
-                    await sessionModel(sessionId).findOneAndDelete({ sessionId });
-                    servers.forget(sessionId);
-                    await fs.remove(sessionPath);
                 }
             } else if (connection === 'open') {
                 console.log('✅ 𝐂onnected:', sessionId);
                 setStatus(sessionId, 'online', { connectedAt: Date.now(), code: null, name: sock.user?.name || null });
+
+                if (pairWatchTimers[sessionId]) { clearTimeout(pairWatchTimers[sessionId]); delete pairWatchTimers[sessionId]; }
 
                 keepAliveTimers[sessionId] = setInterval(async () => {
                     if (!activeSockets[sessionId]) {
@@ -600,6 +671,20 @@ async function restoreAllSessions(serverId = 1) {
             setTimeout(() => restoreAllSessions(serverId), 60000);
             return;
         }
+        const unpaired = (s) => {
+            try {
+                const c = JSON.parse(s.data && s.data['creds.json']);
+                return !(c.registered || c.me);
+            } catch (e) { return false; }   // cannot tell -> keep it
+        };
+        const stale = sessions.filter(s => s.sessionId && unpaired(s));
+        for (const s of stale) {
+            try {
+                await getModel(serverId, 'Session', SessionSchema).deleteMany({ sessionId: s.sessionId });
+                console.log(`${label}: removed never-paired session`, s.sessionId);
+            } catch (e) { console.error('Stale session delete failed:', s.sessionId, e.message); }
+        }
+        sessions = sessions.filter(s => !stale.includes(s));
         console.log(`${label}: restoring ${sessions.length} session(s)...`);
 
         await Promise.all(
