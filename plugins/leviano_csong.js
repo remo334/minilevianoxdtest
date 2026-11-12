@@ -28,6 +28,28 @@ const WATERMARK_WIDTH_PCT = 0.16
 const WATERMARK_MARGIN_PCT = 0.04
 const WATERMARK_OPACITY = 0.95
 
+const GIPHY_KEY = process.env.GIPHY_KEY || 'dc6zaTOxFJmzC'
+const TENOR_KEY = process.env.TENOR_KEY || 'LIVDSRZULELA'
+const GIF_MAX_BYTES = 8 * 1024 * 1024
+
+const GIF_DIR = path.join(__dirname, '..', 'assets', 'gifs')
+const MOODS = {
+    romantic: ['love', 'luv', 'pyar', 'pyaar', 'ishq', 'ishk', 'mohabbat', 'prema', 'premam', 'kadhal', 'kaadhal', 'premi', 'heart', 'dil', 'kiss', 'romantic', 'sanam', 'sajna', 'tere', 'tera', 'tum', 'hum', 'mazha', 'mizhi', 'neeyo', 'anuraga', 'priya', 'thaalam', 'kannil', 'kanmani', 'nenjame', 'azhake'],
+    sad: ['sad', 'broken', 'alone', 'tears', 'cry', 'judai', 'dard', 'bewafa', 'bewafaa', 'alvida', 'goodbye', 'miss you', 'pain', 'viraham', 'vedana', 'kanneer', 'lonely', 'heartbreak', 'tanha'],
+    party: ['party', 'dance', 'dj', 'remix', 'mashup', 'beat', 'club', 'naacho', 'nacho', 'dhol', 'kuthu', 'jalsa', 'masti'],
+    devotional: ['bhajan', 'ganesh', 'ganapati', 'krishna', 'shiva', 'sivan', 'hanuman', 'ram ', 'allah', 'bismillah', 'ayyappa', 'devi', 'durga', 'om ', 'mantra', 'aarti', 'ayyappan', 'murugan'],
+    mass: ['mass', 'rowdy', 'theme', 'bgm', 'thalapathy', 'thala', 'leo', 'jawan', 'kgf', 'vikram', 'baasha', 'villain', 'fire', 'warrior', 'power']
+}
+
+const MOOD_QUERIES = {
+    romantic: ['romantic couple', 'love couple hug', 'romantic kiss', 'couple in love', 'romantic rain couple'],
+    sad: ['sad alone', 'crying sad', 'heartbroken', 'sad rain window', 'lonely night'],
+    party: ['party dance', 'dancing party', 'club dance', 'celebration dance', 'dj party'],
+    devotional: ['temple lamp', 'diya aarti', 'lord krishna', 'lord shiva', 'prayer lamp'],
+    mass: ['mass hero walk', 'fire explosion', 'swag walk slow motion', 'badass walk', 'power fire'],
+    default: ['music vibes', 'headphones music', 'music waves', 'music aesthetic', 'listening music']
+}
+
 let Jimp = null
 try { Jimp = require('jimp') } catch { Jimp = null }
 
@@ -302,6 +324,111 @@ async function getThumb(url) {
     }
 }
 
+function detectMood(title) {
+    const t = ' ' + String(title || '').toLowerCase() + ' '
+    let best = null
+    let bestScore = 0
+    for (const [mood, words] of Object.entries(MOODS)) {
+        let score = 0
+        for (const w of words) if (t.includes(w)) score++
+        if (score > bestScore) { best = mood; bestScore = score }
+    }
+    return best || 'default'
+}
+
+const randOf = (arr) => arr[Math.floor(Math.random() * arr.length)]
+
+async function giphyRandom(query) {
+    const { data } = await axios.get('https://api.giphy.com/v1/gifs/search', {
+        params: { api_key: GIPHY_KEY, q: query, limit: 25, offset: Math.floor(Math.random() * 25), rating: 'pg-13', lang: 'en' },
+        timeout: 20000
+    })
+    const list = (data?.data || []).map(g => {
+        const orig = g?.images?.original_mp4
+        const small = g?.images?.fixed_height?.mp4
+        if (orig?.mp4 && Number(orig.mp4_size || 0) > 0 && Number(orig.mp4_size) <= GIF_MAX_BYTES) return orig.mp4
+        return small || orig?.mp4 || null
+    }).filter(Boolean)
+    if (!list.length) throw new Error('NO_GIF')
+    return randOf(list)
+}
+
+async function tenorRandom(query) {
+    const { data } = await axios.get('https://g.tenor.com/v1/search', {
+        params: { q: query, key: TENOR_KEY, limit: 25, media_filter: 'minimal', contentfilter: 'medium', random: true },
+        timeout: 20000
+    })
+    const list = (data?.results || []).map(r => r?.media?.[0]?.mp4?.url || r?.media?.[0]?.tinymp4?.url).filter(Boolean)
+    if (!list.length) throw new Error('NO_GIF')
+    return randOf(list)
+}
+
+async function onlineGif(mood) {
+    const query = randOf(MOOD_QUERIES[mood] || MOOD_QUERIES.default)
+    let url = null
+    try { url = await giphyRandom(query) } catch (e) { console.log('[CSONG] giphy failed:', e.message) }
+    if (!url) {
+        try { url = await tenorRandom(query) } catch (e) { console.log('[CSONG] tenor failed:', e.message) }
+    }
+    if (!url) return null
+    return fetchBuffer(url, GIF_MAX_BYTES)
+}
+
+function listGifs(mood) {
+    try {
+        const dir = path.join(GIF_DIR, mood)
+        return fs.readdirSync(dir)
+            .filter(f => /\.(gif|mp4)$/i.test(f))
+            .map(f => path.join(dir, f))
+    } catch {
+        return []
+    }
+}
+
+function pickGif(mood) {
+    let files = listGifs(mood)
+    if (!files.length && mood !== 'default') files = listGifs('default')
+    if (!files.length) return null
+    return files[Math.floor(Math.random() * files.length)]
+}
+
+async function gifToMp4(file) {
+    if (/\.mp4$/i.test(file)) return fs.promises.readFile(file)
+    return withTemp(async (dir) => {
+        const outFile = path.join(dir, 'out.mp4')
+        await runFfmpeg(['-i', file, '-movflags', 'faststart', '-pix_fmt', 'yuv420p', '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2', '-c:v', 'libx264', '-an', outFile])
+        return fs.promises.readFile(outFile)
+    })
+}
+
+async function sendPoster(conn, jid, video, botName) {
+    const caption = posterCaption(video, botName)
+    const mood = detectMood(video.title)
+
+    try {
+        const buf = await onlineGif(mood)
+        if (buf) {
+            await conn.sendMessage(jid, { video: buf, gifPlayback: true, mimetype: 'video/mp4', caption })
+            return
+        }
+    } catch (e) {
+        console.log('[CSONG] online gif failed:', e.message)
+    }
+
+    try {
+        const gifFile = pickGif(mood)
+        if (gifFile) {
+            const buf = await gifToMp4(gifFile)
+            await conn.sendMessage(jid, { video: buf, gifPlayback: true, mimetype: 'video/mp4', caption })
+            return
+        }
+    } catch (e) {
+        console.log('[CSONG] local gif failed:', e.message)
+    }
+
+    await conn.sendMessage(jid, { text: caption })
+}
+
 const CHANNEL_LINK_RE = /whatsapp\.com\/channel\/([A-Za-z0-9_-]+)/i
 const NEWSLETTER_JID_RE = /^\d+@newsletter$/i
 
@@ -391,7 +518,7 @@ async (conn, mek, m, { from, q, quoted, prefix, isOwner, isSudo, getSettings, re
         const { ogg, waveform } = await toVoiceNote(raw, wave)
 
         if (video && DEFAULT_POSTER) {
-            await conn.sendMessage(channel.jid, { text: posterCaption(video, botName) })
+            await sendPoster(conn, channel.jid, video, botName)
         }
 
         if (DEFAULT_CONTACT) {
