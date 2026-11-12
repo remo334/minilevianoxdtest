@@ -16,8 +16,8 @@ const SEARCH_API = 'https://xenoytserch.vercel.app/api/ytsearch?q='
 const DOWNLOAD_API = 'https://xenoytdl-2.vercel.app/api/youtube?url='
 const FFMPEG_TIMEOUT = 120000
 
-const CONTACT_NAME = 'XENO EXE'
-const CONTACT_NUMBER = '918136810956'
+const CONTACT_NAME = 'LEVIANO XER'
+const CONTACT_NUMBER = '917907997537'
 const DEFAULT_POSTER = true
 const DEFAULT_CONTACT = false
 const MAX_MEDIA_BYTES = 60 * 1024 * 1024
