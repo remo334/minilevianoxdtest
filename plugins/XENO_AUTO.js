@@ -5,6 +5,7 @@
 //   !autotyping on|off
 //   !autorecording on|off
 //   !autoseen on|off
+//   !autoreact on|off
 //   !autostatus            -> shows all four
 //
 // This file also exports the runtime hooks that pair.js calls (load / apply / presenceType / onMessage).
@@ -16,13 +17,16 @@ const { isConnected, getModel } = require('../lib/db')
 const { serverOf } = require('../lib/servers')
 
 const OWNER_ONLY = 'Only the bot owner can use this command.'
-const KEYS = ['alwaysonline', 'autotyping', 'autorecording', 'autoseen']
+const KEYS = ['alwaysonline', 'autotyping', 'autorecording', 'autoseen', 'autoreact']
 const LABEL = {
     alwaysonline: 'Always Online',
     autotyping: 'Auto Typing',
     autorecording: 'Auto Recording',
-    autoseen: 'Auto Seen'
+    autoseen: 'Auto Seen',
+    autoreact: 'Auto React'
 }
+const REACT_CHANCE = 1      // 1 = react to every message, 0.3 = about 1 in 3 (lower is safer for big groups)
+const DEFAULT_EMOJIS = ['❤', '😍', '🔥', '👍', '😂', '🎉', '💯', '😎']
 const TYPING_MS = 4000   // how long "typing..." / "recording..." stays visible after a message
 
 const schema = new mongoose.Schema({
@@ -30,7 +34,8 @@ const schema = new mongoose.Schema({
     alwaysonline: Boolean,
     autotyping: Boolean,
     autorecording: Boolean,
-    autoseen: Boolean
+    autoseen: Boolean,
+    autoreact: Boolean
 }, { collection: 'autosettings' })
 const modelFor = (sessionId) => getModel(serverOf(sessionId), 'AutoSettings', schema)
 
@@ -41,7 +46,8 @@ const defaults = () => ({
     alwaysonline: false,
     autotyping: !!config.AUTO_TYPING,   // old global config value still works as the default
     autorecording: false,
-    autoseen: false
+    autoseen: false,
+    autoreact: !!config.AUTO_REACT   // old global config value is the default
 })
 
 async function load(sessionId) {
@@ -85,6 +91,12 @@ async function onMessage(sock, mek, sessionId) {
         const s = await load(sessionId)
 
         if (s.autoseen) sock.readMessages([mek.key]).catch(() => {})
+
+        if (s.autoreact && !mek.message?.reactionMessage && Math.random() < REACT_CHANCE) {
+            const list = (Array.isArray(config.REACT_EMOJIS) && config.REACT_EMOJIS.length) ? config.REACT_EMOJIS : DEFAULT_EMOJIS
+            const emoji = list[Math.floor(Math.random() * list.length)]
+            sock.sendMessage(jid, { react: { text: emoji, key: mek.key } }).catch(() => {})
+        }
 
         const mode = s.autorecording ? 'recording' : (s.autotyping ? 'composing' : null)
         if (mode) {
@@ -144,11 +156,12 @@ makeCommand('alwaysonline', { react: '🟢' })
 makeCommand('autotyping', { react: '⌨️' })
 makeCommand('autorecording', { react: '🎙️' })
 makeCommand('autoseen', { react: '👁️' })
+makeCommand('autoreact', { react: '😍' })
 
 cmd({
     pattern: 'autostatus',
     alias: ['autosettings'],
-    desc: 'Show always online / auto typing / auto recording / auto seen status.',
+    desc: 'Show always online / auto typing / auto recording / auto seen / auto react status.',
     category: 'settings',
     react: '📊',
     filename: __filename
@@ -160,7 +173,7 @@ async (conn, mek, m, { prefix, isOwner, sessionId, reply }) => {
         reply(
             `*ᴀᴜᴛᴏ ꜱᴇᴛᴛɪɴɢꜱ*\n\n` +
             KEYS.map(k => `│ ✦ ${LABEL[k]} ➱ ${onoff(s[k])}`).join('\n') +
-            `\n\nChange with: ${prefix}alwaysonline on | ${prefix}autotyping on | ${prefix}autorecording on | ${prefix}autoseen on`
+            `\n\nChange with: ${prefix}alwaysonline on | ${prefix}autotyping on | ${prefix}autorecording on | ${prefix}autoseen on | ${prefix}autoreact on`
         )
     } catch (e) {
         console.log('[AUTO]', e)
