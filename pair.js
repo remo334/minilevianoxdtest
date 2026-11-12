@@ -59,6 +59,7 @@ fs.readdirSync("./plugins/").forEach((plugin) => {
 });
 console.log('𝐀ʟʟ 𝐏ʟᴜɢɪɴꜱ 𝐈ɴꜱᴛᴀʟʟᴇᴅ ⚡');
 
+const auto = require('./plugins/XENO_AUTO');   // always online / auto typing / recording / seen hooks
 const events = require('./command');
 
 const commandMap = new Map();
@@ -155,6 +156,7 @@ async function removeSession(sessionId, sessionPath, status = 'logged_out') {
     for (const k of Object.keys(fileCache)) {
         if (k.startsWith(sessionId + ':')) delete fileCache[k];
     }
+    auto.forget(sessionId);
     servers.forget(sessionId);
     try { await fs.remove(sessionPath); } catch (e) {}
     console.log(`🗑️ Session removed (${status}):`, sessionId, removed ? '' : '(MongoDB delete FAILED)');
@@ -281,6 +283,7 @@ async function Pair(number, res = null, serverId = null) {
             printQRInTerminal: false,
             generateHighQualityLinkPreview: true,
             syncFullHistory: false,
+            markOnlineOnConnect: false,   // presence is controlled by the alwaysonline setting
             connectTimeoutMs: 60000,
             defaultQueryTimeoutMs: 60000,
             keepAliveIntervalMs: 30000,
@@ -430,6 +433,8 @@ async function Pair(number, res = null, serverId = null) {
 
                 if (pairWatchTimers[sessionId]) { clearTimeout(pairWatchTimers[sessionId]); delete pairWatchTimers[sessionId]; }
 
+                await auto.apply(sock, sessionId);
+
                 keepAliveTimers[sessionId] = setInterval(async () => {
                     if (!activeSockets[sessionId]) {
                         clearInterval(keepAliveTimers[sessionId]);
@@ -437,7 +442,7 @@ async function Pair(number, res = null, serverId = null) {
                         return;
                     }
 
-                    sock.sendPresenceUpdate('available', sock.user.id).catch(() => {
+                    sock.sendPresenceUpdate(auto.presenceType(sessionId), sock.user.id).catch(() => {
                         console.log('Keep-alive failed:', sessionId);
                         cleanupSession(sessionId);
                         reconnectTimers[sessionId] = setTimeout(() => Pair(number), 3000);
@@ -460,6 +465,7 @@ async function Pair(number, res = null, serverId = null) {
 
         sock.ev.on('messages.upsert', async (mek) => {
             try {
+                const upsertType = mek.type;
                 mek = mek.messages[0];
 
                 if (!mek.message) return;
@@ -580,10 +586,7 @@ async function Pair(number, res = null, serverId = null) {
                     }).catch(() => {});
                 }
 
-                if (config.AUTO_TYPING) {
-                    sock.sendPresenceUpdate('composing', from).catch(() => {});
-                    setTimeout(() => sock.sendPresenceUpdate('paused', from).catch(() => {}), 3000);
-                }
+                if (upsertType === 'notify') auto.onMessage(sock, mek, sessionId);   // autoseen / autotyping / autorecording
 
                 const cmdName = isCmd ? body.slice(prefix.length).trim().split(' ')[0].toLowerCase() : false;
 
