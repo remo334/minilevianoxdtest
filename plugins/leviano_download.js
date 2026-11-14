@@ -253,14 +253,47 @@ cmd({
     react: "🔎",
     filename: __filename
 },
-async (conn, mek, m, { q, prefix, reply }) => {
+async (conn, mek, m, { from, q, prefix, reply }) => {
     try {
         if (!q) return reply(`Usage: ${prefix}yts <search words>`)
-        const list = (await yts(q)).videos.slice(0, 6)
+        const list = (await yts(q)).videos.slice(0, 10)
         if (!list.length) return reply('No results found.')
-        reply('*🔎 YouTube results*\n\n' + list.map((v, i) =>
+
+        const textList = '*🔎 YouTube results*\n\n' + list.map((v, i) =>
             `${i + 1}. *${v.title}*\n   ࿇ ${v.timestamp} • ࿇ ${v.author?.name || ''}\n   ${v.url}`).join('\n\n') +
-            `\n\nDownload with ${prefix}play <link>`)
+            `\n\nDownload with ${prefix}play <link>`
+
+        // Interactive list (native flow). Tapping a row sends back "<prefix>play <url>",
+        // which pair.js already reads from interactiveResponseMessage.
+        try {
+            const { generateWAMessageFromContent, proto } = require('@whiskeysockets/baileys')
+            const sections = [{
+                title: 'Results',
+                rows: list.map(v => ({
+                    header: v.timestamp || '',
+                    title: String(v.title).slice(0, 72),
+                    description: `${v.author?.name || ''} • ${v.views ? v.views.toLocaleString() + ' views' : ''}`.slice(0, 72),
+                    id: `${prefix}play ${v.url}`
+                }))
+            }]
+            const msg = generateWAMessageFromContent(from, {
+                viewOnceMessage: { message: {
+                    messageContextInfo: { deviceListMetadata: {}, deviceListMetadataVersion: 2 },
+                    interactiveMessage: proto.Message.InteractiveMessage.create({
+                        body: { text: `*🔎 YouTube results for:* ${q}\n\nTap the button and pick a video to download.` },
+                        footer: { text: list.length + ' results' },
+                        nativeFlowMessage: { buttons: [{
+                            name: 'single_select',
+                            buttonParamsJson: JSON.stringify({ title: 'Select video', sections })
+                        }] }
+                    })
+                } }
+            }, { quoted: mek })
+            await conn.relayMessage(from, msg.message, { messageId: msg.key.id })
+        } catch (err) {
+            console.log('yts interactive failed, using text:', err.message)
+            await reply(textList)
+        }
     } catch (e) { console.log(e); reply(friendly(e)) }
 })
 
