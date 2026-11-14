@@ -245,6 +245,16 @@ async (conn, mek, m, { from, q, prefix, sender, reply }) => {
     } catch (e) { console.log(e); reply(friendly(e)) }
 })
 
+// ---- yts uses @itsliaaa/starcore (only this command). Starcore re-exports its Baileys
+// message builders, so the card is built with them and sent over the bot's own connection.
+let _starcore
+const loadStarcore = () => {
+    if (_starcore !== undefined) return _starcore
+    try { _starcore = require('@itsliaaa/starcore') }
+    catch (e) { console.log('starcore not available:', e.message); _starcore = null }
+    return _starcore
+}
+
 cmd({
     pattern: "yts",
     alias: ["ytsearch"],
@@ -259,45 +269,51 @@ async (conn, mek, m, { from, q, prefix, reply }) => {
         const list = (await yts(q)).videos.slice(0, 8)
         if (!list.length) return reply('No results found.')
 
+        // 1) Card carousel (starcore): one card per result, each with Copy link + Open buttons
+        const sc = loadStarcore()
+        if (sc && typeof sc.generateWAMessage === 'function') {
+            try {
+                const cards = list.filter(v => v.thumbnail || v.image).slice(0, 8).map(v => ({
+                    image: { url: v.thumbnail || v.image },
+                    caption: `*${String(v.title).slice(0, 90)}*\n⏱ ${v.timestamp || '-'}  •  👤 ${v.author?.name || '-'}\n👁 ${v.views ? v.views.toLocaleString() : '-'} views`,
+                    footer: `${prefix}play <link> to download`,
+                    nativeFlow: [
+                        { text: '📋 Copy link', copy: v.url },
+                        { text: '▶ Open', url: v.url }
+                    ]
+                }))
+                if (cards.length) {
+                    const msg = await sc.generateWAMessage(from, {
+                        text: `*🔎 YouTube results for:* ${q}`,
+                        footer: `${cards.length} results`,
+                        cards
+                    }, {
+                        userJid: conn.user.id,
+                        upload: conn.waUploadToServer,
+                        quoted: mek,
+                        messageId: undefined
+                    })
+                    const isGroup = from.endsWith('@g.us')
+                    const biz = { tag: 'biz', attrs: {}, content: [{ tag: 'interactive', attrs: { type: 'native_flow', v: '1' }, content: [{ tag: 'native_flow', attrs: { v: '9', name: 'mixed' } }] }] }
+                    const additionalNodes = isGroup ? [biz] : [biz, { tag: 'bot', attrs: { biz_bot: '1' } }]
+                    await conn.relayMessage(from, msg.message, { messageId: msg.key.id, additionalNodes })
+                    return
+                }
+            } catch (err) {
+                console.log('yts starcore card failed, using text:', err.message)
+            }
+        }
+
+        // 2) Fallback: image + text list
         const text = `*🔎 YouTube results for:* ${q}\n\n` + list.map((v, i) =>
             `*${i + 1}. ${v.title}*\n⏱ ${v.timestamp || '-'}  •  👤 ${v.author?.name || '-'}\n🔗 ${v.url}`).join('\n\n') +
             `\n\n➤ Download audio: *${prefix}play <link>*`
-
-        // 1) results list (image + caption, always works)
         const thumb = list[0].thumbnail || list[0].image
-        let sent = false
         if (thumb) {
-            try { await conn.sendMessage(from, { image: { url: thumb }, caption: text }, { quoted: mek }); sent = true }
+            try { return await conn.sendMessage(from, { image: { url: thumb }, caption: text }, { quoted: mek }) }
             catch (e) { console.log('yts thumbnail failed:', e.message) }
         }
-        if (!sent) await conn.sendMessage(from, { text }, { quoted: mek })
-
-        // 2) buttons: Copy link + Open link for the top results
-        try {
-            const { generateWAMessageFromContent, proto } = require('@whiskeysockets/baileys')
-            const top = list.slice(0, 4)
-            const buttons = []
-            top.forEach((v, i) => {
-                buttons.push({ name: 'cta_copy', buttonParamsJson: JSON.stringify({ display_text: `📋 Copy link ${i + 1}`, copy_code: v.url }) })
-                buttons.push({ name: 'cta_url', buttonParamsJson: JSON.stringify({ display_text: `▶ Open ${i + 1}`, url: v.url, merchant_url: v.url }) })
-            })
-            const msg = generateWAMessageFromContent(from, {
-                viewOnceMessage: { message: {
-                    messageContextInfo: { deviceListMetadata: {}, deviceListMetadataVersion: 2 },
-                    interactiveMessage: proto.Message.InteractiveMessage.create({
-                        body: { text: '*Tap a button to copy or open a link*' },
-                        footer: { text: `Top ${top.length} results` },
-                        nativeFlowMessage: { buttons }
-                    })
-                } }
-            }, { quoted: mek })
-            const isGroup = from.endsWith('@g.us')
-            const biz = { tag: 'biz', attrs: {}, content: [{ tag: 'interactive', attrs: { type: 'native_flow', v: '1' }, content: [{ tag: 'native_flow', attrs: { v: '9', name: 'mixed' } }] }] }
-            const additionalNodes = isGroup ? [biz] : [biz, { tag: 'bot', attrs: { biz_bot: '1' } }]
-            await conn.relayMessage(from, msg.message, { messageId: msg.key.id, additionalNodes })
-        } catch (err) {
-            console.log('yts buttons failed:', err.message)
-        }
+        await conn.sendMessage(from, { text }, { quoted: mek })
     } catch (e) { console.log(e); reply(friendly(e)) }
 })
 
