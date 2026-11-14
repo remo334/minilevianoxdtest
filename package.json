@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@distube/ytdl-core": "^4.14.4",
-    "@whiskeysockets/baileys": "7.0.0-rc14",
+    "@whiskeysockets/baileys": "6.7.24",
     "axios": "^1.6.0",
     "dejavu-fonts-ttf": "*",
     "dotenv": "^16.4.5",
