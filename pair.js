@@ -28,7 +28,7 @@ const {
 const { getBuffer, getGroupAdmins, getRandom, h2k, isUrl, Json, runtime, sleep, fetchJson } = require('./lib/functions');
 const { sms } = require('./lib/msg');
 const settingsLib = require('./lib/settings');
-const { connectMongo, isConnected, waitForConnection, getModel, startMonitor, onDbUp } = require('./lib/db');
+const { connectMongo, isConnected, waitForConnection, getModel } = require('./lib/db');
 const servers = require('./lib/servers');
 const safeRequire = (file, fallback) => {
     try { return require(file); }
@@ -43,6 +43,9 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const SESSION_BASE_PATH = './sessions';
 const msgRetryCounterCache = new NodeCache();
+// Recently sent messages. WhatsApp asks the bot to resend a message when the other phone could not
+// decrypt it; without this the chat shows "Waiting for this message" forever.
+const sentMsgCache = new NodeCache({ stdTTL: 3600, checkperiod: 600, useClones: false });
 
 require('events').EventEmitter.defaultMaxListeners = 500;
 
@@ -173,8 +176,8 @@ async function restoreSession(sessionId, sessionPath) {
         console.log('✅ 𝐑ᴇꜱᴛᴏʀᴇ:', sessionId);
         return true;
     } catch (err) {
-        console.error('𝐑ᴇꜱᴛᴏʀᴇ error:', err?.message || err);
-        return 'error';
+        console.error('𝐑ᴇꜱᴛᴏʀᴇ error:', err);
+        return false;
     }
 }
 
@@ -265,16 +268,7 @@ async function Pair(number, res = null, serverId = null) {
     }
 
     try {
-        const restored = await restoreSession(sessionId, sessionPath);
-        if (restored === 'error' && !res && !fs.existsSync(path.join(sessionPath, 'creds.json'))) {
-            // DB unreachable and no local copy: don't start a blank session (it would be
-            // treated as "never paired" and deleted from the DB). Retry later.
-            console.log('DB unavailable, will retry restoring:', sessionId);
-            setStatus(sessionId, 'reconnecting', { connectedAt: null });
-            clearTimeout(reconnectTimers[sessionId]);
-            reconnectTimers[sessionId] = setTimeout(() => Pair(number, null, serverId), 30000);
-            return;
-        }
+        await restoreSession(sessionId, sessionPath);
         await fs.ensureDir(sessionPath);
 
         const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
@@ -296,8 +290,16 @@ async function Pair(number, res = null, serverId = null) {
             connectTimeoutMs: 60000,
             defaultQueryTimeoutMs: 60000,
             keepAliveIntervalMs: 30000,
-            msgRetryCounterCache
+            msgRetryCounterCache,
+            getMessage: async (key) => sentMsgCache.get(key.id) || undefined
         });
+
+        const rawSendMessage = sock.sendMessage.bind(sock);
+        sock.sendMessage = async (jid, content, options) => {
+            const sent = await rawSendMessage(jid, content, options);
+            if (sent?.key?.id && sent.message) sentMsgCache.set(sent.key.id, sent.message);
+            return sent;
+        };
 
         activeSockets[sessionId] = sock;
         setStatus(sessionId, 'connecting');
@@ -334,6 +336,7 @@ async function Pair(number, res = null, serverId = null) {
                 ...(options.contextInfo ? { contextInfo: { ...content[ctype].contextInfo, ...options.contextInfo } } : {})
             } : {});
             await sock.relayMessage(jid, waMessage.message, { messageId: waMessage.key.id });
+            if (waMessage.key?.id && waMessage.message) sentMsgCache.set(waMessage.key.id, waMessage.message);
             return waMessage;
         };
 
@@ -510,6 +513,7 @@ async function Pair(number, res = null, serverId = null) {
                     return;
                 }
                 antidelete.save(sessionId, mek);
+                if (process.env.DEBUG_REACTIONS && mek.message.reactionMessage) console.log('[REACTION RAW]', JSON.stringify(mek.message.reactionMessage), Object.keys(mek.message));
 
                 const m            = sms(sock, mek);
                 const type         = getContentType(mek.message);
@@ -861,18 +865,22 @@ app.get('/', (req, res) => res.send('Bots Server Running!'));
 app.listen(PORT, async () => {
     console.log(`Server running on port ${PORT}`);
     await fs.ensureDir(SESSION_BASE_PATH);
-    startMonitor(1);
-    // when the database comes back after an outage, bring offline sessions back
-    onDbUp((serverId) => { restoreAllSessions(serverId).catch(() => {}); });
-
     let connected = false;
-    try { connected = await connectMongo(1); } catch (e) { console.error('❌', e.message); }
+    try {
+        connected = await connectMongo();
+    } catch (e) {
+        console.error('❌', e.message);
+        process.exit(1);
+    }
     if (!connected) {
-        console.error('❌ MongoDB not reachable yet. The bot stays up and keeps retrying in the background.');
-        for (const n of servers.ids().filter(n => n !== 1)) startExtraServer(n);
-        return;   // the monitor restores sessions once MongoDB connects
+        console.error('❌ Could not connect to MongoDB. Fix the problem above and restart.');
+        process.exit(1);
     }
     console.log('Mongoose', mongoose.version, '| readyState:', mongoose.connection.readyState);
+    if (!(await waitForConnection(30000))) {
+        console.error('❌ MongoDB connection was lost right after connecting. Check Atlas → Network Access (0.0.0.0/0) and that the cluster is not paused, then restart.');
+        process.exit(1);
+    }
     await restoreAllSessions(1);
     for (const n of servers.ids().filter(n => n !== 1)) startExtraServer(n);
 });
