@@ -1,17 +1,16 @@
 //Xeno Exe
-// Sticker packs + "react with a sticker".
+// One numbered sticker list. Stickers are s1, s2, s3 ...
 //
-//   .slist              -> list all sticker packs
-//   .slist <pack>       -> list the stickers inside one pack
-//   .s <emoji>          -> reply to a message; reacts to it with that emoji (e.g. .s 😂)
-//   .sr                 -> reply to an image / video / GIF; makes a sticker and reacts with it
-//   .sr <pack> [sticker]-> same as .s <pack> [sticker]
-//   .s <pack> [sticker] -> reply to a message; the bot answers it with a sticker
-//   .s                  -> reply to a (non-image) message; bot answers with a random sticker
-//   .s                  -> reply to an image/video; unchanged, makes a sticker (old behaviour)
-//   .sadd <pack> [name] -> owner only; reply to a sticker to save it into a pack
+//   s3  /  .s3          -> reply to a message with this; the bot reacts to it with sticker 3
+//                          (plain "s3" works for the bot owner, ".s3" works for everyone the mode allows)
+//   .slist              -> list of sticker numbers      .slist 3 -> show sticker 3      .slist all -> show them all
+//   .s 3  /  .sr 3      -> same as s3
+//   .s <emoji>          -> reply to a message; normal emoji reaction (e.g. .s 😂)
+//   .s  /  .sr          -> on an image/video/GIF: makes a sticker (.sr also reacts with it)
+//   .sadd               -> owner; reply to a sticker / image / video / GIF to add it to the list
+//   .sdel <number>      -> owner; remove a sticker from the list (numbers after it shift down)
 //
-// Packs are plain folders of .webp files:  stickers/<packname>/<anything>.webp
+// Files live in stickers/ (any .webp, one folder deep). stickers/index.json keeps the order.
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
@@ -25,48 +24,63 @@ try { FFMPEG = require('ffmpeg-static') || 'ffmpeg' } catch (e) { }
 if (process.env.FFMPEG_PATH) FFMPEG = process.env.FFMPEG_PATH
 
 const PACK_DIR = path.join(__dirname, '..', 'stickers')
-const MAX_PER_PACK = 60
+const INDEX_FILE = path.join(PACK_DIR, 'index.json')
+const ADD_DIR = 'react'                       // stickers added with .sadd go in stickers/react/
+const MAX_STICKERS = 200
 const MAX_STICKER_BYTES = 1024 * 1024
 const MAX_MEDIA_BYTES = 40 * 1024 * 1024
 const NEED_MEDIA = '_*Please reply to an image, video or GIF.*_'
 
-const safeName = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 30)
-const base = (f) => f.replace(/\.webp$/i, '')
 const pickRandom = (arr) => arr[Math.floor(Math.random() * arr.length)]
+const esc = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-function filesOf(pack) {
+// ---- the numbered list -----------------------------------------------------------
+
+function scanAll() {
+    const out = []
     try {
-        return fs.readdirSync(path.join(PACK_DIR, pack))
-            .filter(f => f.toLowerCase().endsWith('.webp'))
-            .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
-    } catch { return [] }
+        for (const d of fs.readdirSync(PACK_DIR, { withFileTypes: true })) {
+            if (d.isFile() && d.name.toLowerCase().endsWith('.webp')) out.push(d.name)
+            else if (d.isDirectory()) {
+                for (const f of fs.readdirSync(path.join(PACK_DIR, d.name))) {
+                    if (f.toLowerCase().endsWith('.webp')) out.push(`${d.name}/${f}`)
+                }
+            }
+        }
+    } catch (e) { }
+    return out.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
 }
 
-function listPacks() {
+function saveList(list) {
     try {
-        return fs.readdirSync(PACK_DIR, { withFileTypes: true })
-            .filter(d => d.isDirectory())
-            .map(d => d.name)
-            .sort()
-            .map(name => ({ name, files: filesOf(name) }))
-            .filter(p => p.files.length)
-    } catch { return [] }
+        fs.mkdirSync(PACK_DIR, { recursive: true })
+        fs.writeFileSync(INDEX_FILE, JSON.stringify(list, null, 1))
+    } catch (e) { console.log('[STICKER] could not save index:', e.message) }
 }
 
-// pack by number (1-based, as shown in .slist) or by name
-function findPack(packs, key) {
-    key = String(key || '').toLowerCase()
-    if (/^\d+$/.test(key)) return packs[Number(key) - 1]
-    return packs.find(p => p.name === key)
+// Ordered list of sticker files. Saved order first, new files on disk appended at the end.
+function stickerList() {
+    let saved = []
+    try { saved = JSON.parse(fs.readFileSync(INDEX_FILE, 'utf8')) } catch (e) { }
+    if (!Array.isArray(saved)) saved = []
+    const all = scanAll()
+    const onDisk = new Set(all)
+    const list = saved.filter(f => onDisk.has(f))
+    const known = new Set(list)
+    for (const f of all) if (!known.has(f)) list.push(f)
+    if (JSON.stringify(list) !== JSON.stringify(saved)) saveList(list)
+    return list
 }
 
-// sticker by number (1-based), by file name, or random when omitted
-function findFile(pack, key) {
-    if (!key || ['r', 'random'].includes(String(key).toLowerCase())) return pickRandom(pack.files)
-    key = String(key).toLowerCase()
-    if (/^\d+$/.test(key)) return pack.files[Number(key) - 1]
-    return pack.files.find(f => base(f).toLowerCase() === key)
+const readSticker = (rel) => fs.readFileSync(path.join(PACK_DIR, rel))
+
+// "3" or "s3" -> 3 (or null)
+const parseNumber = (t) => {
+    const m = /^s?(\d{1,3})$/i.exec(String(t || '').trim())
+    return m ? Number(m[1]) : null
 }
+
+// ---- helpers ---------------------------------------------------------------------
 
 // First emoji of a string (WhatsApp reactions hold exactly one), or null.
 function firstEmoji(str) {
@@ -78,7 +92,7 @@ function firstEmoji(str) {
     return seg.find(g => /\p{Extended_Pictographic}/u.test(g)) || null
 }
 
-// Rebuild the message being replied to, so the sticker can quote it.
+// Rebuild the message being replied to, so we can react to it / quote it.
 function quotedOf(mek, from, botNumber) {
     const msg = mek.message || {}
     const ci = msg[getContentType(msg)]?.contextInfo
@@ -94,8 +108,6 @@ function quotedOf(mek, from, botNumber) {
         message: ci.quotedMessage
     }
 }
-
-// ---- sending ---------------------------------------------------------------------
 
 let warnedFallback = false
 // React to message `qm` with a sticker. Falls back to a quoted sticker reply when this
@@ -113,21 +125,18 @@ async function reactWithSticker(conn, from, qm, sticker) {
     }
 }
 
-// Choose a sticker from the packs. args = [pack, sticker]. Returns { buf } or { error }.
-function stickerFromPack(args, prefix) {
-    const packs = listPacks()
-    if (!packs.length) return { error: `No sticker packs yet.\nOwner: reply to a sticker with *${prefix}sadd <packname>* to start one.` }
-    let pack, file
-    if (!args.length) {
-        pack = pickRandom(packs)
-        file = pickRandom(pack.files)
-    } else {
-        pack = findPack(packs, args[0])
-        if (!pack) return { error: `Pack *${args[0]}* not found. Send *${prefix}slist* to see all packs.` }
-        file = findFile(pack, args[1])
-        if (!file) return { error: `Sticker *${args[1]}* not found in *${pack.name}*. Send *${prefix}slist ${pack.name}*` }
-    }
-    return { buf: fs.readFileSync(path.join(PACK_DIR, pack.name, file)) }
+// Sticker number n from the list -> { buf } or { error }
+function stickerByNumber(n, prefix) {
+    const list = stickerList()
+    if (!list.length) return { error: `No stickers yet.\nOwner: reply to a sticker with *${prefix}sadd* to add one.` }
+    if (!n || n < 1 || n > list.length) return { error: `There is no sticker *s${n}*. You have s1 to s${list.length}. Send *${prefix}slist*` }
+    return { buf: readSticker(list[n - 1]) }
+}
+
+function randomSticker(prefix) {
+    const list = stickerList()
+    if (!list.length) return { error: `No stickers yet.\nOwner: reply to a sticker with *${prefix}sadd* to add one.` }
+    return { buf: readSticker(pickRandom(list)) }
 }
 
 // ---- image / video / GIF -> sticker ----------------------------------------------
@@ -193,28 +202,64 @@ async function toSticker(input, isVideo) {
     }
 }
 
+// ---- commands --------------------------------------------------------------------
+
+// Reply to a message with "s3" (owner) or ".s3" (anyone the bot mode allows) -> react with sticker 3.
+cmd({
+    on: 'body',
+    dontAddCommandList: true,
+    filename: __filename
+},
+async (conn, mek, m, { from, body, prefix, isOwner, botNumber, reply }) => {
+    try {
+        const text = String(body || '').trim()
+        const hit = new RegExp(`^(${esc(prefix)})?s(\\d{1,3})$`, 'i').exec(text)
+        if (!hit) return
+        if (!hit[1] && !isOwner) return           // bare "s3" is owner only, so normal chat is never hijacked
+        const qm = quotedOf(mek, from, botNumber)
+        if (!qm) return                           // nothing to react to: stay quiet
+        const r = stickerByNumber(Number(hit[2]), prefix)
+        if (r.error) return reply(r.error)
+        await reactWithSticker(conn, from, qm, r.buf)
+    } catch (e) {
+        console.log('[STICKER s#]', e)
+    }
+})
+
 cmd({
     pattern: 'slist',
     alias: ['stickerlist', 'spacks'],
-    desc: 'List sticker packs. Usage: .slist  or  .slist <pack>',
+    desc: 'List stickers as s1, s2, s3... Usage: .slist  |  .slist 3  |  .slist all',
     category: 'convert',
     filename: __filename
 },
-async (conn, mek, m, { q, prefix, reply }) => {
+async (conn, mek, m, { from, q, prefix, reply }) => {
     try {
-        const packs = listPacks()
-        if (!packs.length) {
-            return reply(`No sticker packs yet.\nOwner: reply to a sticker with *${prefix}sadd <packname>* to start one.`)
+        const list = stickerList()
+        if (!list.length) return reply(`No stickers yet.\nOwner: reply to a sticker with *${prefix}sadd* to add one.`)
+        const arg = (q || '').trim().toLowerCase()
+
+        if (arg === 'all') {
+            const n = Math.min(list.length, 30)
+            await reply(`Sending s1 to s${n} in order...`)
+            for (let i = 0; i < n; i++) {
+                await conn.sendMessage(from, { sticker: readSticker(list[i]) })
+                await new Promise(r => setTimeout(r, 700))
+            }
+            return
         }
-        const key = (q || '').trim().split(/ +/)[0]
-        if (key) {
-            const pack = findPack(packs, key)
-            if (!pack) return reply(`Pack *${key}* not found. Send *${prefix}slist* to see all packs.`)
-            const lines = pack.files.map((f, i) => `│ ${i + 1}. ${base(f)}`)
-            return reply(`*${pack.name.toUpperCase()}* (${pack.files.length})\n${lines.join('\n')}\n\nReply to a message with:\n➱ ${prefix}s ${pack.name} <number or name>\n➱ ${prefix}s ${pack.name}  (random)`)
+        if (arg) {
+            const num = parseNumber(arg)
+            const r = stickerByNumber(num, prefix)
+            if (r.error) return reply(r.error)
+            await reply(`*s${num}*`)
+            return await conn.sendMessage(from, { sticker: r.buf })
         }
-        const lines = packs.map((p, i) => `│ ${i + 1}. ${p.name}  (${p.files.length})`)
-        reply(`*STICKER PACKS*\n${lines.join('\n')}\n\nReply to a message with:\n➱ ${prefix}s <emoji>  (emoji reaction, e.g. ${prefix}s 😂)\n➱ ${prefix}sr  (on an image/video/GIF: sticker reaction)\n➱ ${prefix}s <pack> [number or name]\n➱ ${prefix}s  (random sticker)\n➱ ${prefix}slist <pack>  (see stickers inside)`)
+
+        const labels = list.map((_, i) => `s${i + 1}`)
+        const rows = []
+        for (let i = 0; i < labels.length; i += 10) rows.push('│ ' + labels.slice(i, i + 10).join('  '))
+        reply(`*STICKER LIST* (${list.length})\n${rows.join('\n')}\n\nReply to a message with *s1*, *s2*...\nto react with that sticker.\n\n➱ ${prefix}slist 3  (see s3)\n➱ ${prefix}slist all  (see all)\n➱ ${prefix}s 😂  (emoji reaction)`)
     } catch (e) {
         console.log(e)
         reply(`${e}`)
@@ -223,7 +268,7 @@ async (conn, mek, m, { q, prefix, reply }) => {
 
 cmd({
     pattern: 's',
-    desc: 'React to a replied message. Usage: .s <emoji> (emoji reaction) or .s <pack> [number|name] (sticker). On an image/video with no args it makes a sticker.',
+    desc: 'React to a replied message. .s <emoji> (emoji), .s <number> (sticker). On an image/video with no args it makes a sticker.',
     category: 'convert',
     filename: __filename
 },
@@ -239,13 +284,13 @@ async (conn, mek, m, ctx) => {
             if (maker) return await maker.function(conn, mek, m, ctx)
         }
 
-        if (!qm) return reply(`Reply to a message with *${prefix}s <emoji>* or *${prefix}s <pack>*\nSee packs: *${prefix}slist*`)
+        if (!qm) return reply(`Reply to a message with *${prefix}s <emoji>* or *${prefix}s <number>*\nSee the list: *${prefix}slist*`)
 
         // ".s 😂" -> native WhatsApp emoji reaction on the replied message
         const emoji = firstEmoji(args[0])
         if (emoji) return await conn.sendMessage(from, { react: { text: emoji, key: qm.key } })
 
-        const r = stickerFromPack(args, prefix)
+        const r = args.length ? stickerByNumber(parseNumber(args[0]), prefix) : randomSticker(prefix)
         if (r.error) return reply(r.error)
         await reactWithSticker(conn, from, qm, r.buf)
     } catch (e) {
@@ -257,7 +302,7 @@ async (conn, mek, m, ctx) => {
 cmd({
     pattern: 'sr',
     alias: ['sreact'],
-    desc: 'Sticker reaction. Reply to an image/video/GIF with .sr (makes a sticker and reacts with it), or .sr <pack> [number|name] on any message.',
+    desc: 'Sticker reaction. .sr <number> reacts with that sticker. On an image/video/GIF, .sr makes a sticker and reacts with it.',
     category: 'convert',
     filename: __filename
 },
@@ -268,7 +313,7 @@ async (conn, mek, m, { from, args, prefix, botNumber, reply }) => {
 
         let sticker
         if (args.length) {
-            const r = stickerFromPack(args, prefix)
+            const r = stickerByNumber(parseNumber(args[0]), prefix)
             if (r.error) return reply(r.error)
             sticker = r.buf
         } else {
@@ -288,39 +333,54 @@ async (conn, mek, m, { from, args, prefix, botNumber, reply }) => {
 cmd({
     pattern: 'sadd',
     alias: ['addsticker'],
-    desc: 'Owner: save a replied sticker into a pack. Usage: reply to a sticker with .sadd <pack> [name]',
+    desc: 'Owner: add to the sticker list. Reply to a sticker, image, video or GIF with .sadd',
     category: 'convert',
     filename: __filename
 },
-async (conn, mek, m, { from, args, prefix, botNumber, isOwner, reply }) => {
+async (conn, mek, m, { from, prefix, botNumber, isOwner, reply }) => {
     try {
         if (!isOwner) return reply('Only the bot owner can use this command.')
         const qm = quotedOf(mek, from, botNumber)
-        const node = qm?.message?.stickerMessage
-        if (!node) return reply(`Reply to a sticker with *${prefix}sadd <packname> [name]*`)
+        const media = qm && mediaOf(qm.message)
+        if (!media) return reply(`Reply to a sticker, image, video or GIF with *${prefix}sadd*`)
+        if (media.type === 'video' && Number(media.node.seconds || 0) > 10) return reply('Video is too long. Use a video under 10 seconds.')
 
-        const pack = safeName(args[0])
-        if (!pack) return reply(`Give a pack name: *${prefix}sadd <packname> [name]*`)
-        if (/^\d+$/.test(pack)) return reply('Pack name needs at least one letter (numbers are used to pick packs).')
+        const list = stickerList()
+        if (list.length >= MAX_STICKERS) return reply(`The list is full (${MAX_STICKERS} stickers). Remove one with *${prefix}sdel <number>*`)
 
-        const dir = path.join(PACK_DIR, pack)
-        const existing = filesOf(pack)
-        if (existing.length >= MAX_PER_PACK) return reply(`Pack *${pack}* is full (${MAX_PER_PACK} stickers).`)
+        const raw = await download(media.node, media.type)
+        const sticker = media.type === 'sticker' ? raw : await toSticker(raw, media.type === 'video')
+        if (sticker.length > MAX_STICKER_BYTES) return reply('That sticker is too large (over 1 MB). Try a shorter or smaller one.')
 
-        const name = safeName(args[1]) || String(existing.length + 1)
-        const file = `${name}.webp`
-        if (existing.includes(file)) return reply(`*${pack}* already has a sticker named *${name}*.`)
+        const rel = `${ADD_DIR}/${Date.now()}.webp`
+        fs.mkdirSync(path.join(PACK_DIR, ADD_DIR), { recursive: true })
+        fs.writeFileSync(path.join(PACK_DIR, rel), sticker)
+        list.push(rel)
+        saveList(list)
+        reply(`Added as *s${list.length}*\nReply to a message with *s${list.length}* to react with it.`)
+    } catch (e) {
+        console.log(e)
+        reply(String(e?.message) === 'FILE_TOO_LARGE' ? 'That file is too large.' : '_SORRY, ERROR. TRY AGAIN_')
+    }
+})
 
-        const chunks = []
-        let size = 0
-        for await (const c of await downloadContentFromMessage(node, 'sticker')) {
-            size += c.length
-            if (size > MAX_STICKER_BYTES) return reply('That sticker is too large.')
-            chunks.push(c)
-        }
-        fs.mkdirSync(dir, { recursive: true })
-        fs.writeFileSync(path.join(dir, file), Buffer.concat(chunks))
-        reply(`Saved to *${pack}* as *${name}* (pack now has ${existing.length + 1}).`)
+cmd({
+    pattern: 'sdel',
+    alias: ['delsticker'],
+    desc: 'Owner: remove a sticker from the list. Usage: .sdel <number>',
+    category: 'convert',
+    filename: __filename
+},
+async (conn, mek, m, { args, prefix, isOwner, reply }) => {
+    try {
+        if (!isOwner) return reply('Only the bot owner can use this command.')
+        const n = parseNumber(args[0])
+        const list = stickerList()
+        if (!n || n > list.length) return reply(`Use *${prefix}sdel <number>*  (you have s1 to s${list.length})`)
+        const [rel] = list.splice(n - 1, 1)
+        try { fs.unlinkSync(path.join(PACK_DIR, rel)) } catch (e) { }
+        saveList(list)
+        reply(`Removed *s${n}*. Stickers after it moved down by one.`)
     } catch (e) {
         console.log(e)
         reply(`${e}`)
