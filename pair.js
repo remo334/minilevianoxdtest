@@ -43,6 +43,24 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const SESSION_BASE_PATH = './sessions';
 const msgRetryCounterCache = new NodeCache();
+// DEBUG_REACTIONS=1: print the raw wire format of incoming reactions (and of messages Baileys cannot
+// read at all), including fields this Baileys version does not know. Used to learn how WhatsApp's
+// sticker reactions are encoded. Costs nothing when the variable is not set.
+if (process.env.DEBUG_REACTIONS) {
+    const { dump } = require('./lib/protodump');
+    const origDecode = proto.Message.decode;
+    proto.Message.decode = function (reader, length) {
+        const msg = origDecode.call(proto.Message, reader, length);
+        try {
+            const known = Object.keys(proto.Message.toObject(msg) || {});
+            if (msg.reactionMessage || known.length === 0) {
+                console.log('[REACTION WIRE] known fields: ' + (known.join(',') || '(none)') + '\n' + dump(Buffer.from(reader)));
+            }
+        } catch (e) { console.log('[REACTION WIRE] dump failed:', e.message); }
+        return msg;
+    };
+}
+
 // Recently sent messages. WhatsApp asks the bot to resend a message when the other phone could not
 // decrypt it; without this the chat shows "Waiting for this message" forever.
 const sentMsgCache = new NodeCache({ stdTTL: 3600, checkperiod: 600, useClones: false });
