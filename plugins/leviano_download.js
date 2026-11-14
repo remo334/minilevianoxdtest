@@ -256,43 +256,47 @@ cmd({
 async (conn, mek, m, { from, q, prefix, reply }) => {
     try {
         if (!q) return reply(`Usage: ${prefix}yts <search words>`)
-        const list = (await yts(q)).videos.slice(0, 10)
+        const list = (await yts(q)).videos.slice(0, 8)
         if (!list.length) return reply('No results found.')
 
-        const textList = '*🔎 YouTube results*\n\n' + list.map((v, i) =>
-            `${i + 1}. *${v.title}*\n   ࿇ ${v.timestamp} • ࿇ ${v.author?.name || ''}\n   ${v.url}`).join('\n\n') +
-            `\n\nDownload with ${prefix}play <link>`
+        const text = `*🔎 YouTube results for:* ${q}\n\n` + list.map((v, i) =>
+            `*${i + 1}. ${v.title}*\n⏱ ${v.timestamp || '-'}  •  👤 ${v.author?.name || '-'}\n🔗 ${v.url}`).join('\n\n') +
+            `\n\n➤ Download audio: *${prefix}play <link>*`
 
-        // Interactive list (native flow). Tapping a row sends back "<prefix>play <url>",
-        // which pair.js already reads from interactiveResponseMessage.
+        // 1) results list (image + caption, always works)
+        const thumb = list[0].thumbnail || list[0].image
+        let sent = false
+        if (thumb) {
+            try { await conn.sendMessage(from, { image: { url: thumb }, caption: text }, { quoted: mek }); sent = true }
+            catch (e) { console.log('yts thumbnail failed:', e.message) }
+        }
+        if (!sent) await conn.sendMessage(from, { text }, { quoted: mek })
+
+        // 2) buttons: Copy link + Open link for the top results
         try {
             const { generateWAMessageFromContent, proto } = require('@whiskeysockets/baileys')
-            const sections = [{
-                title: 'Results',
-                rows: list.map(v => ({
-                    header: v.timestamp || '',
-                    title: String(v.title).slice(0, 72),
-                    description: `${v.author?.name || ''} • ${v.views ? v.views.toLocaleString() + ' views' : ''}`.slice(0, 72),
-                    id: `${prefix}play ${v.url}`
-                }))
-            }]
+            const top = list.slice(0, 4)
+            const buttons = []
+            top.forEach((v, i) => {
+                buttons.push({ name: 'cta_copy', buttonParamsJson: JSON.stringify({ display_text: `📋 Copy link ${i + 1}`, copy_code: v.url }) })
+                buttons.push({ name: 'cta_url', buttonParamsJson: JSON.stringify({ display_text: `▶ Open ${i + 1}`, url: v.url, merchant_url: v.url }) })
+            })
             const msg = generateWAMessageFromContent(from, {
                 viewOnceMessage: { message: {
                     messageContextInfo: { deviceListMetadata: {}, deviceListMetadataVersion: 2 },
                     interactiveMessage: proto.Message.InteractiveMessage.create({
-                        body: { text: `*🔎 YouTube results for:* ${q}\n\nTap the button and pick a video to download.` },
-                        footer: { text: list.length + ' results' },
-                        nativeFlowMessage: { buttons: [{
-                            name: 'single_select',
-                            buttonParamsJson: JSON.stringify({ title: 'Select video', sections })
-                        }] }
+                        body: { text: '*Tap a button to copy or open a link*' },
+                        footer: { text: `Top ${top.length} results` },
+                        nativeFlowMessage: { buttons }
                     })
                 } }
             }, { quoted: mek })
-            await conn.relayMessage(from, msg.message, { messageId: msg.key.id })
+            const isGroup = from.endsWith('@g.us')
+            const biz = { tag: 'biz', attrs: {}, content: [{ tag: 'interactive', attrs: { type: 'native_flow', v: '1' }, content: [{ tag: 'native_flow', attrs: { v: '9', name: 'mixed' } }] }] }
+            const additionalNodes = isGroup ? [biz] : [biz, { tag: 'bot', attrs: { biz_bot: '1' } }]
+            await conn.relayMessage(from, msg.message, { messageId: msg.key.id, additionalNodes })
         } catch (err) {
-            console.log('yts interactive failed, using text:', err.message)
-            await reply(textList)
+            console.log('yts buttons failed:', err.message)
         }
     } catch (e) { console.log(e); reply(friendly(e)) }
 })
