@@ -161,7 +161,7 @@ function cleanupSession(sessionId) {
 // Afterwards the same number can be paired again from scratch.
 async function removeSession(sessionId, sessionPath, status = 'logged_out') {
     cleanupSession(sessionId);
-    setStatus(sessionId, status, { connectedAt: null });
+    setStatus(sessionId, status, { connectedAt: null, everOnline: false });
 
     let removed = false;
     for (let attempt = 1; attempt <= 3 && !removed; attempt++) {
@@ -260,6 +260,40 @@ async function followChannel(sock, sessionId) {
         return false;
     }
 }
+
+// Reconnect with backoff. Pair() handles its own errors (it marks the session 'error' and returns),
+// so a failed attempt used to end the bot silently. Now it keeps trying until the socket is up.
+const reconnectAttempts = {};
+function scheduleReconnect(number, sessionId, delay) {
+    if (reconnectTimers[sessionId]) clearTimeout(reconnectTimers[sessionId]);
+    const attempt = reconnectAttempts[sessionId] || 0;
+    const wait = delay ?? Math.min(5000 * 2 ** attempt, 60000);
+    reconnectTimers[sessionId] = setTimeout(async () => {
+        delete reconnectTimers[sessionId];
+        reconnectAttempts[sessionId] = attempt + 1;
+        try {
+            await Pair(number, null, servers.assigned(sessionId) || null);
+        } catch (e) {
+            console.error('Reconnect failed:', sessionId, e?.message || e);
+        }
+        const info = sessionInfo[sessionId];
+        if (!activeSockets[sessionId] && !reconnectTimers[sessionId] && info?.everOnline && info.status === 'error') {
+            console.log(`Reconnect attempt ${attempt + 1} failed for ${sessionId}, retrying...`);
+            scheduleReconnect(number, sessionId);
+        }
+    }, wait);
+}
+
+// Watchdog: a session that was online once, has no socket and nothing scheduled gets revived.
+setInterval(() => {
+    for (const [sessionId, info] of Object.entries(sessionInfo)) {
+        if (!info.everOnline || activeSockets[sessionId] || reconnectTimers[sessionId]) continue;
+        if (!['error', 'reconnecting', 'offline'].includes(info.status)) continue;
+        if (Date.now() - (info.since || 0) < 2 * 60 * 1000) continue;
+        console.log('Watchdog: reviving', sessionId);
+        scheduleReconnect(sessionId.replace('leviano_', ''), sessionId, 1000);
+    }
+}, 60 * 1000);
 
 async function Pair(number, res = null, serverId = null) {
     const xnumber = number.replace(/[^0-9]/g, '');
@@ -455,16 +489,18 @@ async function Pair(number, res = null, serverId = null) {
                 } else {
                     setStatus(sessionId, 'reconnecting', { code: statusCode, connectedAt: null });
                     console.log('Reconnecting:', sessionId);
-                    reconnectTimers[sessionId] = setTimeout(() => Pair(number), 5000);
+                    scheduleReconnect(number, sessionId);
                 }
             } else if (connection === 'open') {
                 console.log('✅ 𝐂onnected:', sessionId);
-                setStatus(sessionId, 'online', { connectedAt: Date.now(), code: null, name: sock.user?.name || null });
+                setStatus(sessionId, 'online', { connectedAt: Date.now(), code: null, name: sock.user?.name || null, everOnline: true });
+                reconnectAttempts[sessionId] = 0;
 
                 if (pairWatchTimers[sessionId]) { clearTimeout(pairWatchTimers[sessionId]); delete pairWatchTimers[sessionId]; }
 
                 await auto.apply(sock, sessionId);
 
+                let keepAliveFails = 0;
                 keepAliveTimers[sessionId] = setInterval(async () => {
                     if (!activeSockets[sessionId]) {
                         clearInterval(keepAliveTimers[sessionId]);
@@ -472,10 +508,14 @@ async function Pair(number, res = null, serverId = null) {
                         return;
                     }
 
-                    sock.sendPresenceUpdate(auto.presenceType(sessionId), sock.user.id).catch(() => {
+                    sock.sendPresenceUpdate(auto.presenceType(sessionId), sock.user.id).then(() => {
+                        keepAliveFails = 0;
+                    }).catch(() => {
+                        // one slow reply is normal; two in a row means the socket is dead
+                        if (++keepAliveFails < 2) return;
                         console.log('Keep-alive failed:', sessionId);
                         cleanupSession(sessionId);
-                        reconnectTimers[sessionId] = setTimeout(() => Pair(number), 3000);
+                        scheduleReconnect(number, sessionId, 3000);
                     });
                 }, 30000);
 
@@ -922,6 +962,12 @@ async function shutdown(signal) {
 }
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
+
+process.on('unhandledRejection', (reason) => {
+    const e = String(reason);
+    if (e.includes('Connection Closed') || e.includes('rate-overlimit') || e.includes('Socket connection timeout')) return;
+    console.log('Unhandled rejection:', reason);
+});
 
 process.on('uncaughtException', (err) => {
     const e = String(err);
