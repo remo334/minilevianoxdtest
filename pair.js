@@ -28,7 +28,7 @@ const {
 const { getBuffer, getGroupAdmins, getRandom, h2k, isUrl, Json, runtime, sleep, fetchJson } = require('./lib/functions');
 const { sms } = require('./lib/msg');
 const settingsLib = require('./lib/settings');
-const { connectMongo, isConnected, waitForConnection, getModel } = require('./lib/db');
+const { connectMongo, isConnected, waitForConnection, getModel, startMonitor, onDbUp } = require('./lib/db');
 const servers = require('./lib/servers');
 const safeRequire = (file, fallback) => {
     try { return require(file); }
@@ -173,8 +173,8 @@ async function restoreSession(sessionId, sessionPath) {
         console.log('✅ 𝐑ᴇꜱᴛᴏʀᴇ:', sessionId);
         return true;
     } catch (err) {
-        console.error('𝐑ᴇꜱᴛᴏʀᴇ error:', err);
-        return false;
+        console.error('𝐑ᴇꜱᴛᴏʀᴇ error:', err?.message || err);
+        return 'error';
     }
 }
 
@@ -265,7 +265,16 @@ async function Pair(number, res = null, serverId = null) {
     }
 
     try {
-        await restoreSession(sessionId, sessionPath);
+        const restored = await restoreSession(sessionId, sessionPath);
+        if (restored === 'error' && !res && !fs.existsSync(path.join(sessionPath, 'creds.json'))) {
+            // DB unreachable and no local copy: don't start a blank session (it would be
+            // treated as "never paired" and deleted from the DB). Retry later.
+            console.log('DB unavailable, will retry restoring:', sessionId);
+            setStatus(sessionId, 'reconnecting', { connectedAt: null });
+            clearTimeout(reconnectTimers[sessionId]);
+            reconnectTimers[sessionId] = setTimeout(() => Pair(number, null, serverId), 30000);
+            return;
+        }
         await fs.ensureDir(sessionPath);
 
         const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
@@ -852,22 +861,18 @@ app.get('/', (req, res) => res.send('Bots Server Running!'));
 app.listen(PORT, async () => {
     console.log(`Server running on port ${PORT}`);
     await fs.ensureDir(SESSION_BASE_PATH);
+    startMonitor(1);
+    // when the database comes back after an outage, bring offline sessions back
+    onDbUp((serverId) => { restoreAllSessions(serverId).catch(() => {}); });
+
     let connected = false;
-    try {
-        connected = await connectMongo();
-    } catch (e) {
-        console.error('❌', e.message);
-        process.exit(1);
-    }
+    try { connected = await connectMongo(1); } catch (e) { console.error('❌', e.message); }
     if (!connected) {
-        console.error('❌ Could not connect to MongoDB. Fix the problem above and restart.');
-        process.exit(1);
+        console.error('❌ MongoDB not reachable yet. The bot stays up and keeps retrying in the background.');
+        for (const n of servers.ids().filter(n => n !== 1)) startExtraServer(n);
+        return;   // the monitor restores sessions once MongoDB connects
     }
     console.log('Mongoose', mongoose.version, '| readyState:', mongoose.connection.readyState);
-    if (!(await waitForConnection(30000))) {
-        console.error('❌ MongoDB connection was lost right after connecting. Check Atlas → Network Access (0.0.0.0/0) and that the cluster is not paused, then restart.');
-        process.exit(1);
-    }
     await restoreAllSessions(1);
     for (const n of servers.ids().filter(n => n !== 1)) startExtraServer(n);
 });
