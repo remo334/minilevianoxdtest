@@ -8,6 +8,7 @@
     "dev": "nodemon pair.js"
   },
   "dependencies": {
+    "@itsliaaa/starcore": "latest",
     "@distube/ytdl-core": "^4.14.4",
     "@whiskeysockets/baileys": "6.7.24",
     "axios": "^1.6.0",
