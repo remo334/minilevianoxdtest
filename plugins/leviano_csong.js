@@ -5,8 +5,6 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const crypto = require('crypto')
-const mongoose = require('mongoose')
-const { pipeline } = require('stream/promises')
 const { spawn } = require('child_process')
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys')
 const config = require('../config')
@@ -50,8 +48,9 @@ const MOOD_QUERIES = {
     default: ['music vibes', 'headphones music', 'music waves', 'music aesthetic', 'listening music']
 }
 
+// jimp v1 exports { Jimp } (older v0 exported the class directly)
 let Jimp = null
-try { Jimp = require('jimp') } catch { Jimp = null }
+try { const j = require('jimp'); Jimp = j.Jimp || j } catch { Jimp = null }
 
 async function applyWatermark(thumbBuffer) {
     if (!Jimp || !thumbBuffer) return thumbBuffer
@@ -63,7 +62,7 @@ async function applyWatermark(thumbBuffer) {
         ])
 
         const targetW = Math.round(base.bitmap.width * WATERMARK_WIDTH_PCT)
-        mark.resize(targetW, Jimp.AUTO)
+        mark.resize({ w: targetW })
         if (WATERMARK_OPACITY < 1) mark.opacity(WATERMARK_OPACITY)
 
         const margin = Math.round(base.bitmap.width * WATERMARK_MARGIN_PCT)
@@ -77,7 +76,7 @@ async function applyWatermark(thumbBuffer) {
         }
 
         base.composite(mark, x, y)
-        return await base.getBufferAsync(Jimp.MIME_PNG)
+        return await base.getBuffer('image/png')
     } catch (err) {
         console.error('[CSONG] watermark failed:', err.message)
         return thumbBuffer
@@ -87,12 +86,6 @@ async function applyWatermark(thumbBuffer) {
 let FFMPEG = 'ffmpeg'
 try { FFMPEG = require('ffmpeg-static') || 'ffmpeg' } catch {}
 if (process.env.FFMPEG_PATH) FFMPEG = process.env.FFMPEG_PATH
-
-function getYouTubeId(url) {
-    const re = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=|shorts\/)([^#\&\?]*).*/
-    const match = String(url).match(re)
-    return (match && match[2].length === 11) ? match[2] : null
-}
 
 const WAVE_STYLES = ['real', 'heartbeat', 'ecg', 'mountain', 'beat', 'pulse', 'equalizer', 'ramp', 'smooth']
 const DEFAULT_WAVE = 'real'
@@ -330,7 +323,10 @@ function detectMood(title) {
     let bestScore = 0
     for (const [mood, words] of Object.entries(MOODS)) {
         let score = 0
-        for (const w of words) if (t.includes(w)) score++
+        for (const w of words) {
+            const word = w.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+            if (new RegExp('(^|[^a-z0-9])' + word + '([^a-z0-9]|$)').test(t)) score++
+        }
         if (score > bestScore) { best = mood; bestScore = score }
     }
     return best || 'default'
@@ -426,6 +422,17 @@ async function sendPoster(conn, jid, video, botName) {
         console.log('[CSONG] local gif failed:', e.message)
     }
 
+    try {
+        const thumbUrl = video.thumbnail || video.thumb || video.image || video.img
+        const thumb = await getThumb(thumbUrl)
+        if (thumb) {
+            await conn.sendMessage(jid, { image: thumb, caption })
+            return
+        }
+    } catch (e) {
+        console.log('[CSONG] thumb poster failed:', e.message)
+    }
+
     await conn.sendMessage(jid, { text: caption })
 }
 
@@ -472,7 +479,7 @@ function friendly(e) {
     if (msg === 'TOO_LONG') return 'That song is too long.'
     if (msg === 'NO_AUDIO') return 'The replied message is not an audio.'
     if (msg.startsWith('FFMPEG')) return 'Could not convert the audio. Try another song.'
-    return 'Could not send the song. Try again.'
+    return 'Could not send the song: ' + msg.slice(0, 150)
 }
 
 const MAX_MINUTES = 15
