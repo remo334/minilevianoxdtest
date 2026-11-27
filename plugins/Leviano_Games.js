@@ -1,4 +1,4 @@
-//Xeno Exe
+//Monjan Nick
 // In-chat games: play right inside WhatsApp. No links, no website.
 // Start with a command (e.g. !snake), then just send plain replies like  a  d  5  w  f  (no prefix).
 const { cmd } = require('../command')
