@@ -1,4 +1,4 @@
-//Xeno Exe
+//Monjan Nick
 const { cmd } = require('../command')
 
 
