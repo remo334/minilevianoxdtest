@@ -1,4 +1,4 @@
-//Xeno Exe
+//Monjan Nick
 // One numbered sticker list. Stickers are s1, s2, s3 ...
 //
 //   s3  /  .s3          -> reply to a message with this; the bot reacts to it with sticker 3
