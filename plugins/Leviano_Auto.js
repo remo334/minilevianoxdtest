@@ -1,4 +1,4 @@
-//Xeno Exe
+//Monjan Nick
 // Always online / auto typing / auto recording / auto seen  (per bot number, saved in MongoDB)
 //
 //   !alwaysonline on|off
