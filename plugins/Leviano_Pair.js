@@ -1,4 +1,4 @@
-//Xeno Exe
+//Monjan Nick
 const axios = require('axios')
 const { cmd } = require('../command')
 
