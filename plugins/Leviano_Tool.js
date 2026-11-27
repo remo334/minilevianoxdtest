@@ -1,4 +1,4 @@
-//Leviano Xd
+//Monjan Nick
 const { cmd } = require('../command')
 const COOLDOWN_MS = 3000
 const lastUse = new Map()
