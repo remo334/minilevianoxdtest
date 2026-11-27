@@ -80,7 +80,7 @@ fs.readdirSync("./plugins/").forEach((plugin) => {
 });
 console.log('𝐀ʟʟ 𝐏ʟᴜɢɪɴꜱ 𝐈ɴꜱᴛᴀʟʟᴇᴅ ⚡');
 
-const auto = require('./plugins/XENO_AUTO');   // always online / auto typing / recording / seen hooks
+const auto = require('./plugins/Leviano_Auto');   // always online / auto typing / recording / seen hooks
 const events = require('./command');
 
 const commandMap = new Map();
