@@ -1,4 +1,4 @@
-//Xeno Exe
+//Monjan Nick 
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys')
 const { cmd } = require('../command')
 
