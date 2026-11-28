@@ -127,61 +127,65 @@ async function resolveVideo(q) {
 
 const card = (v) => `𝑳𝜺𝝂𝜾⃮⃯⃔𝜶𝜼𝝄♪🤍\n\n *${v.title}*\n\n࿇ ${v.author?.name || 'Unknown'}\n࿇ ${v.timestamp}\n࿇ ${Number(v.views || 0).toLocaleString()}\n࿇ ${v.url}`
 
-const SEARCH_API = 'https://xenoytserch.vercel.app/api/ytsearch?q='
-const MP3_API = 'https://xenoytdl-2.vercel.app/api/youtube?format=mp3&url='
-const SONG_API = 'https://xenoytdl-2.vercel.app/api/youtube?url='
-
 const toSeconds = (d) => String(d || '').split(':').reduce((a, b) => a * 60 + (Number(b) || 0), 0)
 
-function findDownloadUrl(obj) {
-    const preferred = ['download', 'downloadUrl', 'download_url', 'dl', 'link', 'audio', 'mp3', 'url', 'src']
+// ---- jerrycoder.zone.id YouTube API
+const BASE = (process.env.JERRY_API_BASE || 'https://www.jerrycoder.zone.id').replace(/\/+$/, '')
+const PATHS = {
+    audio: process.env.JERRY_MP3_PATH || '/ytmp3dl',
+    video: process.env.JERRY_MP4_PATH || '/ytmp4dl'
+}
+const PREFERRED = ['downloadUrl', 'download_url', 'download', 'dl_url', 'dl', 'link', 'audio', 'mp3', 'video', 'mp4', 'url', 'src']
+// never treat the YouTube page or a thumbnail as the media file
+const NOT_MEDIA = /youtu\.be\/|youtube\.com\/|ytimg\.com\/|\.(jpe?g|png|webp|gif)(\?|$)/i
+
+// find the media link inside any response shape
+function findLink(obj) {
     const seen = new Set()
     const walk = (o, depth = 0) => {
         if (o == null || depth > 5) return null
-        if (typeof o === 'string') return (/^https?:\/\//i.test(o) && !YT_RE.test(o)) ? o : null
+        if (typeof o === 'string') return (/^https?:\/\//i.test(o) && !NOT_MEDIA.test(o)) ? o : null
         if (typeof o !== 'object' || seen.has(o)) return null
         seen.add(o)
-        for (const k of preferred) if (k in o) { const r = walk(o[k], depth + 1); if (r) return r }
-        for (const k of Object.keys(o)) { const r = walk(o[k], depth + 1); if (r) return r }
+        for (const k of PREFERRED) if (k in o) { const r = walk(o[k], depth + 1); if (r) return r }
+        for (const [k, v] of Object.entries(o)) {
+            if (/thumb|image|avatar|creator|author|channel|owner|developer/i.test(k)) continue
+            const r = walk(v, depth + 1); if (r) return r
+        }
         return null
     }
     return walk(obj)
 }
 
+// kind: 'audio' | 'video'. Returns a direct download link.
+async function jerryLink(videoUrl, kind, quality, timeout = 90000) {
+    const params = { url: videoUrl }
+    if (quality) params.quality = quality
+    const { data } = await axios.get(BASE + PATHS[kind], { params, timeout, headers: { 'User-Agent': 'Mozilla/5.0' } })
+    if (data?.status === false || data?.success === false) throw new Error('API_FAIL')
+    const link = findLink(data)
+    if (!link) {
+        console.log('[JERRY] no link in response:', JSON.stringify(data).slice(0, 500))
+        throw new Error('API_FAIL')
+    }
+    return link
+}
+
+// search with yt-search (no external search API needed)
 async function searchSong(q) {
-    const { data } = await axios.get(SEARCH_API + encodeURIComponent(q), { timeout: 30000 })
-    const first = data?.results?.[0]
-    if (!first || !first.url) throw new Error('NO_RESULT')
-    return first
+    const v = await resolveVideo(q)
+    return {
+        url: v.url,
+        title: v.title,
+        thumbnail: v.thumbnail || v.image || '',
+        channel: v.author?.name || '',
+        duration: v.timestamp || '',
+        views: v.views ? Number(v.views).toLocaleString() : ''
+    }
 }
 
-const YTVIDEO2_API = 'https://xenosirapis.zone.id/api/ytvideo2?url='
-const AMEEN_YTD = 'https://ameen-api.vercel.app/v2/ytd?url='
-const SIR_MP3 = 'https://jerrycoder.zone.id//ytmp3dl?url='
-const SIR_MP4 = 'https://xenosirapis.zone.id/api/ytmp4dl?url='
-
-async function downloadViaApi(api, videoUrl, expect, suffix = '') {
-    const { data } = await axios.get(api + encodeURIComponent(videoUrl) + suffix, { timeout: 90000 })
-    if (data?.status === false || data?.success === false) throw new Error('API_FAIL')
-    const link = findDownloadUrl(data)
-    if (!link) throw new Error('API_FAIL')
-    const { res } = await fetchSafe(link)
-    const type = String(res.headers['content-type'] || '')
-    if (/text\/|html|json/i.test(type) || (expect === 'video' && /^audio\//i.test(type))) { res.data.destroy(); throw new Error('API_FAIL') }
-    if (Number(res.headers['content-length']) > MAX_BYTES) { res.data.destroy(); throw new Error('FILE_TOO_LARGE') }
-    return toBuffer(res.data)
-}
-
-function buildSongUrl(videoUrl) {
-    return SONG_API + encodeURIComponent(videoUrl) + '&format=mp3'
-}
-
-async function downloadViaSongApi(videoUrl) {
-    const { data } = await axios.get(buildSongUrl(videoUrl), { timeout: 90000 })
-    if (data?.status === false || data?.success === false) throw new Error('API_FAIL')
-    const link = findDownloadUrl(data)
-    if (!link) throw new Error('API_FAIL')
-    const { res } = await fetchSafe(link)
+async function downloadViaJerry(videoUrl) {
+    const { res } = await fetchSafe(await jerryLink(videoUrl, 'audio'))
     const type = String(res.headers['content-type'] || '')
     if (/text\/|html|json/i.test(type)) { res.data.destroy(); throw new Error('API_FAIL') }
     if (Number(res.headers['content-length']) > MAX_BYTES) { res.data.destroy(); throw new Error('FILE_TOO_LARGE') }
@@ -212,10 +216,7 @@ async function firstThatWorks(label, steps) {
 }
 
 const downloadMp3 = (videoUrl) => firstThatWorks('YT-AUDIO', [
-    function songApi() { return downloadViaSongApi(videoUrl) },
-    function ameenApi() { return downloadViaApi(AMEEN_YTD, videoUrl) },
-    function sirApi() { return downloadViaApi(SIR_MP3, videoUrl) },
-    function xenoApi() { return downloadViaApi(MP3_API, videoUrl) },
+    function jerryApi() { return downloadViaJerry(videoUrl) },
     function savetubeApi() { return downloadViaSavetube(videoUrl, 'audio') }
 ])
 
