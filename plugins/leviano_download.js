@@ -157,7 +157,7 @@ async function searchSong(q) {
 
 const YTVIDEO2_API = 'https://xenosirapis.zone.id/api/ytvideo2?url='
 const AMEEN_YTD = 'https://ameen-api.vercel.app/v2/ytd?url='
-const SIR_MP3 = 'https://xenosirapis.zone.id/api/ytmp3dl?url='
+const SIR_MP3 = 'https://jerrycoder.zone.id//ytmp3dl?url='
 const SIR_MP4 = 'https://xenosirapis.zone.id/api/ytmp4dl?url='
 
 async function downloadViaApi(api, videoUrl, expect, suffix = '') {
