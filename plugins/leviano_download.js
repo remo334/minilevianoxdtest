@@ -208,16 +208,20 @@ async function firstThatWorks(label, steps) {
         try { return await step() }
         catch (e) {
             if (e?.message === 'FILE_TOO_LARGE') throw e
-            console.log(`[${label}] ${step.name || 'method'} failed:`, e?.message || e)
+            console.log(`[${label}] ${step.name || 'method'} failed:`, e?.message || e,
+                e?.response?.status || '', e?.config?.url || '')
             if (!last || e?.message === 'YT_BLOCKED' || last?.message !== 'YT_BLOCKED') last = e
         }
     }
-    throw last || new Error('API_FAIL')
+    // network errors get the same clear message as API_FAIL
+    if (!['YT_BLOCKED', 'YTDLP_FAILED', 'NO_YTDL'].includes(last?.message)) throw new Error('API_FAIL')
+    throw last
 }
 
 const downloadMp3 = (videoUrl) => firstThatWorks('YT-AUDIO', [
     function jerryApi() { return downloadViaJerry(videoUrl) },
-    function savetubeApi() { return downloadViaSavetube(videoUrl, 'audio') }
+    function savetubeApi() { return downloadViaSavetube(videoUrl, 'audio') },
+    async function ytDlp() { return (await ytdlpDownload(videoUrl, { kind: 'audio', maxBytes: MAX_BYTES })).buffer }
 ])
 
 cmd({
